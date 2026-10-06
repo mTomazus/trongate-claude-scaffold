@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="<?= BASE_URL ?>css/trongate.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>css/app.css">
     <?= $additional_includes_top ?? '' ?>
-    <title><?= $page_title ?? 'Welcome to Trongate' ?></title>
+    <title><?= out($page_title ?? 'Welcome to Trongate') ?></title>
 </head>
 <body>
     <div class="container">

@@ -156,6 +156,12 @@ The scaffold ships two gates so that "it works" is something you can check rathe
 
 These are the same rules already written in `CLAUDE.md`. The difference is that a hook is enforced and prose is not.
 
+If you change the guard, run its tests from the scaffold folder (they are not copied into projects):
+
+```bash
+php tests/php_guard_test.php
+```
+
 ### HTTP test suite
 
 ```bash
