@@ -1,6 +1,6 @@
 # Gauntlet Loop — Roles and Loop
 
-Read this before starting Tier 2 or Tier 3 work. The tier definitions, Evidence Standard and Stop and Escalation Rules live in `CLAUDE.md` §5 and still apply.
+Read this before starting Tier 2 or Tier 3 work. The tier definitions, Evidence Standard and Stop and Escalation Rules live in `AGENTS.md` §5 and still apply.
 
 ## Roles
 
@@ -25,7 +25,7 @@ Keep these roles separate:
    - Starts with fresh context.
    - Receives the spec, acceptance criteria, and the diff. **Do not pass it the implementer's self-assessment** — that is the thing it exists to check.
    - Runs the gates itself rather than trusting reported output.
-   - Looks for unmet criteria, regressions, security issues, unnecessary scope, and violations of `CLAUDE.md`.
+   - Looks for unmet criteria, regressions, security issues, unnecessary scope, and violations of `AGENTS.md`.
    - Returns concrete findings with file/line references and a reproducible check.
    - Has no edit tools. It reports; the implementer fixes.
 

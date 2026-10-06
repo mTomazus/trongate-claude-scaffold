@@ -48,7 +48,7 @@ In priority order:
 2. **Regressions.** The whole suite, not only the new tests.
 3. **Security.** Unescaped output, unparameterised queries, missing auth checks on new routes.
 4. **Scope.** Changes that trace to no criterion. Silent widening is a finding.
-5. **Violations of CLAUDE.md.** Composer, `controllers/` subfolders, edits to `engine/`, multiple classes per file.
+5. **Violations of AGENTS.md.** Composer, `controllers/` subfolders, edits to `engine/`, multiple classes per file.
 
 ## Reporting
 

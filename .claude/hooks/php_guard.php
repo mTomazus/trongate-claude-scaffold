@@ -2,7 +2,7 @@
 /**
  * PostToolUse guard for Trongate projects.
  *
- * Every rule below is already written in CLAUDE.md. This file makes them
+ * Every rule below is already written in AGENTS.md. This file makes them
  * deterministic instead of advisory: prose gets drifted from, a non-zero
  * exit code does not.
  *
@@ -108,7 +108,7 @@ function report_and_exit(array $violations, string $path): void {
         exit(0);
     }
 
-    fwrite(STDERR, "CLAUDE.md violations in {$path}:\n");
+    fwrite(STDERR, "AGENTS.md violations in {$path}:\n");
     foreach ($violations as $violation) {
         fwrite(STDERR, "  - {$violation}\n");
     }

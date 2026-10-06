@@ -70,6 +70,7 @@ EXCLUDES=(
   --exclude 'deploy.sh'        # don't ship the deploy script itself
   --exclude '.deploy.env'
   --exclude 'CLAUDE.md'
+  --exclude 'AGENTS.md'
   --exclude '.hintrc'
   --exclude '/tests/'          # HTTP test suite — dev only
   --exclude '/tools/'          # phpstan.phar and its wrappers — dev only

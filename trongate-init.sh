@@ -69,7 +69,15 @@ echo ""
 
 echo "Installing Claude scaffold files..."
 
+# AGENTS.md is the manual (read by Codex and other agents); CLAUDE.md just
+# imports it, because Claude Code only reads CLAUDE.md.
+install_file "$SCAFFOLD_DIR/AGENTS.md" "AGENTS.md" once
 install_file "$SCAFFOLD_DIR/CLAUDE.md" "CLAUDE.md" once
+if ! grep -qxF '@AGENTS.md' "$TARGET_DIR/CLAUDE.md"; then
+  echo "  NOTE: your CLAUDE.md does not import AGENTS.md, so Claude Code and other agents"
+  echo "        read different manuals. Move anything you added into AGENTS.md, then make"
+  echo "        CLAUDE.md contain just the line:  @AGENTS.md"
+fi
 
 install_file "$SCAFFOLD_DIR/_reference/trongate-memory.md" "_reference/trongate-memory.md"
 install_file "$SCAFFOLD_DIR/_reference/gauntlet.md" "_reference/gauntlet.md"
@@ -219,7 +227,7 @@ echo "Setup complete."
 echo "========================================"
 echo ""
 echo "Your Trongate project is ready with:"
-echo "  - Claude scaffold (CLAUDE.md, slash commands, reference docs)"
+echo "  - Claude scaffold (AGENTS.md + CLAUDE.md, slash commands, reference docs)"
 echo "  - Trongate's native css/trongate.css plus public/css/app.css - no build step"
 echo "  - Under-construction homepage (shown by default)"
 echo "  - Component showcase at /welcome/components"

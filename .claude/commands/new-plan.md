@@ -9,7 +9,7 @@ Use the template at `_reference/plans/PLAN_TEMPLATE.md` as the structure.
 
 Steps:
 1. Read the spec at `_reference/specs/$ARGUMENTS.md`
-2. Classify the work as Tier 0, 1, 2 or 3 using the rules in CLAUDE.md §5, and record it
+2. Classify the work as Tier 0, 1, 2 or 3 using the rules in AGENTS.md §5, and record it
 3. Fill in Acceptance Criteria. For Tier 2 and 3, delegate this to the `specifier` agent and use its output; carry its Open Questions into the plan
 4. Fill in Forbidden Changes and Approval Gates
 5. List every file that will be created or modified

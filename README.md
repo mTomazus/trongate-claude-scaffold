@@ -8,7 +8,8 @@ A scaffold for working with [Trongate PHP v2](https://trongate.io) and Claude Co
 
 ```
 trongate-claude-scaffold/
-  CLAUDE.md                          # Claude's operating manual for Trongate projects
+  AGENTS.md                          # The operating manual for Trongate projects (Codex and other agents read this)
+  CLAUDE.md                          # One line, @AGENTS.md, so Claude Code reads the same manual
   trongate-init.sh                   # Setup script - run once per new project
   _reference/
     trongate-memory.md               # AI-optimized Trongate v2 reference (read first)
@@ -21,7 +22,7 @@ trongate-claude-scaffold/
       specifier.md                   # Spec -> testable acceptance criteria
       verifier.md                    # Independent check; runs gates, reports findings
     hooks/
-      php_guard.php                  # Enforces CLAUDE.md rules on every write
+      php_guard.php                  # Enforces AGENTS.md rules on every write
     commands/
       new-spec.md                    # /new-spec - create a feature spec
       new-plan.md                    # /new-plan - create a plan from a spec
@@ -50,6 +51,12 @@ trongate-claude-scaffold/
 The `project-files/` folder mirrors the exact paths these files will land at in your Trongate project. The init script simply copies them across.
 
 When you run `trongate-init`, it also clones the [official Trongate docs repo](https://github.com/trongate/trongate-docs) into `_reference/trongate-docs-repo/` for deep reference when needed.
+
+### Claude Code and Codex
+
+The manual lives in `AGENTS.md`, which Codex and most other coding agents read. Claude Code only reads `CLAUDE.md`, so that file holds a single line, `@AGENTS.md`, which imports the manual. Edit `AGENTS.md`; leave `CLAUDE.md` alone.
+
+The slash commands, agents and the `php_guard` hook under `.claude/` are Claude Code features. Other agents don't run the hook automatically; `AGENTS.md` tells them how to run it by hand.
 
 ---
 
@@ -83,7 +90,7 @@ trongate-init
 The script will:
 
 **Claude scaffold:**
-- Create `CLAUDE.md` at the project root
+- Create `AGENTS.md` and `CLAUDE.md` at the project root
 - Create `_reference/` with the memory file and templates
 - Create `.claude/commands/` with all slash commands
 - Create `.claude/settings.json` and `.claude/hooks/php_guard.php` (convention gate)
@@ -101,7 +108,7 @@ The script will:
 - Add `modules/welcome/views/components_showcase.php`
 - Create `../deploy.sh` and `../.deploy.env` if they do not already exist (`DEPLOY_SOURCE` is set to this project's folder name)
 
-The script refuses to run outside a Trongate project root (it checks for `engine/` and `modules/`). It is safe to re-run: on a project that has already been initialised, any file you have changed is kept and reported. `trongate-init --force` replaces those with the scaffold's version. `CLAUDE.md`, `tests/welcome_test.php` and `.claude/settings.json` are never replaced without `--force` (settings.json not even then).
+The script refuses to run outside a Trongate project root (it checks for `engine/` and `modules/`). It is safe to re-run: on a project that has already been initialised, any file you have changed is kept and reported. `trongate-init --force` replaces those with the scaffold's version. `AGENTS.md`, `CLAUDE.md`, `tests/welcome_test.php` and `.claude/settings.json` are never replaced without `--force` (settings.json not even then).
 
 ---
 
@@ -155,7 +162,7 @@ The scaffold ships two gates so that "it works" is something you can check rathe
 
 `.claude/hooks/php_guard.php` runs automatically after every file Claude writes or edits. It rejects syntax errors, trailing `?>`, `controllers/` subfolders, non-snake_case module folders, multiple classes in one file, a class name that does not match its filename, empty `parent::__construct()` constructors, stray `namespace` declarations, and anything Composer-shaped.
 
-These are the same rules already written in `CLAUDE.md`. The difference is that a hook is enforced and prose is not.
+These are the same rules already written in `AGENTS.md`. The difference is that a hook is enforced and prose is not.
 
 If you change the guard, run its tests from the scaffold folder (they are not copied into projects):
 
@@ -209,7 +216,7 @@ Exit codes for both gates: `0` clean, `1` real findings, `2` could not run. **Ex
 
 ## Gauntlet Agents
 
-Two agents in `.claude/agents/` support the Gauntlet Loop described in `CLAUDE.md`:
+Two agents in `.claude/agents/` support the Gauntlet Loop described in `AGENTS.md`:
 
 | Agent | Role |
 | --- | --- |

@@ -3,7 +3,7 @@
 **Date:** YYYY-MM-DD
 **Spec:** `_reference/specs/[SPEC_FILE].md`
 **Status:** In Progress | Complete | Blocked
-**Tier:** 0 | 1 | 2 | 3 (see CLAUDE.md §5)
+**Tier:** 0 | 1 | 2 | 3 (see AGENTS.md §5)
 
 ## Summary
 One paragraph describing what this plan implements and why.
@@ -15,7 +15,7 @@ One observable outcome per criterion, each with the check that proves it. For Ti
   Check: 
 
 ## Forbidden Changes and Approval Gates
-What this plan must not touch, and what needs a human yes before it happens (see CLAUDE.md Stop and Escalation Rules).
+What this plan must not touch, and what needs a human yes before it happens (see AGENTS.md Stop and Escalation Rules).
 
 - 
 
