@@ -110,6 +110,8 @@ The script will:
 
 The script refuses to run outside a Trongate project root (it checks for `engine/` and `modules/`). It is safe to re-run: on a project that has already been initialised, any file you have changed is kept and reported. `trongate-init --force` replaces those with the scaffold's version. `AGENTS.md`, `CLAUDE.md`, `tests/welcome_test.php` and `.claude/settings.json` are never replaced without `--force` (settings.json not even then).
 
+Any existing file the script replaces — on a first run or with `--force` — is copied to `.trongate-init-backup/<timestamp>/` first, under the same path, and the script lists what it backed up. That folder is added to `.gitignore`; delete it once you've checked nothing you need was in it.
+
 ---
 
 ## Deploying

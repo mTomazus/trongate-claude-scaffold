@@ -34,10 +34,16 @@ if [ -f "$TARGET_DIR/_reference/trongate-memory.md" ]; then
   FIRST_RUN=0
 fi
 
+# Every file that gets replaced is copied here first, so a first run on a
+# project you have already worked on never loses your changes.
+BACKUP_DIR="$TARGET_DIR/.trongate-init-backup/$(date +%Y%m%d-%H%M%S)"
+BACKED_UP=0
+
 # install_file <path relative to scaffold source> <path relative to project> [once]
 #   - identical file already there: nothing to do
 #   - "once": never replace an existing file (unless --force)
 #   - otherwise replace on a first run, keep the user's version on a re-run
+#   - an existing file is backed up to $BACKUP_DIR before it is replaced
 install_file() {
   local src="$1" rel="$2" once="${3:-}"
   local dest="$TARGET_DIR/$rel"
@@ -51,6 +57,10 @@ install_file() {
       echo "  $rel differs from the scaffold - kept yours (--force replaces it)"
       return
     fi
+    mkdir -p "$(dirname "$BACKUP_DIR/$rel")"
+    cp -p "$dest" "$BACKUP_DIR/$rel"
+    BACKED_UP=$((BACKED_UP + 1))
+    echo "  Backed up $rel"
   fi
 
   mkdir -p "$(dirname "$dest")"
@@ -110,7 +120,7 @@ install_file "$SCAFFOLD_DIR/project-files/tests/welcome_test.php" "tests/welcome
 # Add preferred defaults to .gitignore. Existing entries are never discarded.
 touch "$TARGET_DIR/.gitignore"
 gitignore_changed=0
-for pattern in "config/" "config_*/" "_reference/trongate-docs-repo/" "tools/*.phar" ".DS_Store"; do
+for pattern in "config/" "config_*/" "_reference/trongate-docs-repo/" "tools/*.phar" ".DS_Store" ".trongate-init-backup/"; do
   if ! grep -qxF "$pattern" "$TARGET_DIR/.gitignore"; then
     if [ "$gitignore_changed" -eq 0 ]; then
       printf '\n# Added by trongate-init\n' >> "$TARGET_DIR/.gitignore"
@@ -226,6 +236,11 @@ echo "========================================"
 echo "Setup complete."
 echo "========================================"
 echo ""
+if [ "$BACKED_UP" -gt 0 ]; then
+  echo "Replaced $BACKED_UP existing file(s). The originals are in:"
+  echo "  ${BACKUP_DIR#$TARGET_DIR/}/"
+  echo ""
+fi
 echo "Your Trongate project is ready with:"
 echo "  - Claude scaffold (AGENTS.md + CLAUDE.md, slash commands, reference docs)"
 echo "  - Trongate's native css/trongate.css plus public/css/app.css - no build step"
