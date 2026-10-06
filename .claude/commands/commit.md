@@ -1,3 +1,8 @@
+---
+description: Review, stage and commit changes; pushes only when asked
+argument-hint: "[push]"
+---
+
 Review all staged and unstaged changes in this project, then:
 
 1. Run `git status` and `git diff` to see what changed

@@ -1,3 +1,7 @@
+---
+description: Pull the latest Trongate docs into _reference/trongate-docs-repo/
+---
+
 Update the local Trongate documentation to the latest version from GitHub.
 
 Run the following shell command:

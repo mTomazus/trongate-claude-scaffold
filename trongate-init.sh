@@ -72,6 +72,7 @@ echo "Installing Claude scaffold files..."
 install_file "$SCAFFOLD_DIR/CLAUDE.md" "CLAUDE.md" once
 
 install_file "$SCAFFOLD_DIR/_reference/trongate-memory.md" "_reference/trongate-memory.md"
+install_file "$SCAFFOLD_DIR/_reference/gauntlet.md" "_reference/gauntlet.md"
 install_file "$SCAFFOLD_DIR/_reference/specs/SPEC_TEMPLATE.md" "_reference/specs/SPEC_TEMPLATE.md"
 install_file "$SCAFFOLD_DIR/_reference/plans/PLAN_TEMPLATE.md" "_reference/plans/PLAN_TEMPLATE.md"
 

@@ -1,3 +1,8 @@
+---
+description: Create a feature spec in _reference/specs/ after asking clarifying questions
+argument-hint: "[feature name]"
+---
+
 Create a new spec file in `_reference/specs/` for the feature described below.
 
 Use the template at `_reference/specs/SPEC_TEMPLATE.md` as the structure.

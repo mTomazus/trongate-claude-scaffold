@@ -1,3 +1,8 @@
+---
+description: Security review of the modules/ directory
+argument-hint: "[optional focus]"
+---
+
 Perform a security review of this Trongate PHP codebase.
 
 Scan all files in the `modules/` directory and check for the following:

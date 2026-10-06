@@ -12,6 +12,7 @@ trongate-claude-scaffold/
   trongate-init.sh                   # Setup script - run once per new project
   _reference/
     trongate-memory.md               # AI-optimized Trongate v2 reference (read first)
+    gauntlet.md                      # Gauntlet roles and loop, read for Tier 2/3 work
     specs/SPEC_TEMPLATE.md           # Template for scoping new features
     plans/PLAN_TEMPLATE.md           # Template for implementation plans
   .claude/

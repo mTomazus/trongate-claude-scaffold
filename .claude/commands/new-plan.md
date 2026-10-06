@@ -1,3 +1,8 @@
+---
+description: Create an implementation plan in _reference/plans/ from an existing spec
+argument-hint: "[spec filename without .md]"
+---
+
 Create a new implementation plan in `_reference/plans/` based on an existing spec.
 
 Use the template at `_reference/plans/PLAN_TEMPLATE.md` as the structure.
