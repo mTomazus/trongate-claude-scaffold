@@ -1,216 +1,252 @@
 <!--
-    Under-construction homepage.
+    Under-construction homepage, in the Click Me Studio style.
     Self-contained styling so it works regardless of the project's theme.
 
     Optional constants (define in config/site_owner.php):
       OUR_EMAIL_ADDRESS - contact email shown on the page
-      OUR_NAME          - company/site name shown in the footer
+      OUR_NAME          - company/site name shown in the header and footer
     Both fall back to placeholder values if not defined.
 -->
 
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@1,500&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+
     /* Scoped to the construction page via the .uc-page wrapper */
     .uc-page {
-        --uc-bg: #0e1116;
-        --uc-bg-soft: #161b22;
-        --uc-line: rgba(255, 255, 255, 0.06);
-        --uc-text: #e6e1d8;
-        --uc-text-dim: #8a8f98;
-        --uc-accent: #e0a458;
-        --uc-accent-soft: rgba(224, 164, 88, 0.12);
+        --uc-cream: #f7f4ee;
+        --uc-dark: #07151f;
+        --uc-dark-2: #123041;
+        --uc-text: #0e1e27;
+        --uc-muted: rgba(14, 30, 39, 0.66);
+        --uc-accent: #00a79d;
+        --uc-accent-warm: #ff6b4a;
+        --uc-accent-blue: #3157d5;
+        --uc-border: rgba(14, 30, 39, 0.12);
+        --uc-border-2: rgba(14, 30, 39, 0.22);
+        --uc-font-display: 'Skia', 'Space Grotesk', 'Inter', system-ui, sans-serif;
+        --uc-font-body: 'Inter', system-ui, sans-serif;
 
         position: fixed;
         inset: 0;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: clamp(1rem, 3vh, 2.5rem);
+        padding: clamp(1.25rem, 3vh, 2rem) 0;
+        background:
+            linear-gradient(135deg, rgba(0, 167, 157, 0.08), transparent 32%),
+            linear-gradient(220deg, rgba(255, 107, 74, 0.09), transparent 30%),
+            var(--uc-cream);
+        color: var(--uc-text);
+        font-family: var(--uc-font-body);
+        overflow: hidden auto;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    .uc-page *, .uc-page *::before, .uc-page *::after { box-sizing: border-box; }
+
+    .uc-container {
+        width: min(1100px, calc(100% - 32px));
+        margin: 0 auto;
+    }
+
+    /* Top bar: brand + status */
+    .uc-bar {
         display: flex;
         align-items: center;
-        justify-content: center;
-        background: var(--uc-bg);
-        color: var(--uc-text);
-        overflow: hidden;
-        font-family: ui-sans-serif, "Helvetica Neue", Helvetica, sans-serif;
-    }
-
-    /* Import distinctive fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Archivo:wght@400;500;600&display=swap');
-
-    .uc-page .uc-display {
-        font-family: "Fraunces", Georgia, serif;
-    }
-
-    .uc-page .uc-body-font {
-        font-family: "Archivo", ui-sans-serif, sans-serif;
-    }
-
-    /* Animated blueprint grid background */
-    .uc-grid {
-        position: absolute;
-        inset: -2px;
-        background-image:
-            linear-gradient(var(--uc-line) 1px, transparent 1px),
-            linear-gradient(90deg, var(--uc-line) 1px, transparent 1px);
-        background-size: 44px 44px;
-        mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, #000 30%, transparent 80%);
-        -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, #000 30%, transparent 80%);
-        animation: uc-grid-drift 22s linear infinite;
-    }
-
-    @keyframes uc-grid-drift {
-        from { transform: translate(0, 0); }
-        to   { transform: translate(44px, 44px); }
-    }
-
-    /* Soft glow behind the content */
-    .uc-glow {
-        position: absolute;
-        top: 38%;
-        left: 50%;
-        width: 640px;
-        height: 640px;
-        transform: translate(-50%, -50%);
-        background: radial-gradient(circle, var(--uc-accent-soft) 0%, transparent 60%);
-        pointer-events: none;
-    }
-
-    .uc-content {
-        position: relative;
-        z-index: 2;
-        text-align: center;
-        padding: 2rem;
-        max-width: 640px;
-    }
-
-    /* The animated build mark */
-    .uc-mark {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 64px;
-        height: 64px;
-        margin-bottom: 2rem;
-        border: 1px solid var(--uc-accent);
-        border-radius: 14px;
-        position: relative;
+        justify-content: space-between;
+        gap: 1rem;
+        font-family: var(--uc-font-display);
+        font-weight: 600;
         opacity: 0;
         animation: uc-fade-up 0.7s ease forwards;
     }
 
-    .uc-mark::before {
+    .uc-brand {
+        font-size: 1.1rem;
+        letter-spacing: -0.03em;
+    }
+
+    .uc-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 6px 14px;
+        border: 1px solid var(--uc-border);
+        border-radius: 999px;
+        font-size: 0.8rem;
+    }
+
+    .uc-status::before {
         content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: 14px;
-        background: var(--uc-accent-soft);
-        animation: uc-pulse 2.8s ease-in-out infinite;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--uc-accent);
+        animation: uc-pulse 2.4s ease-in-out infinite;
     }
 
-    .uc-mark svg {
-        width: 30px;
-        height: 30px;
-        stroke: var(--uc-accent);
-        position: relative;
-        z-index: 1;
+    /* Giant drifting word rows */
+    .uc-row {
+        display: flex;
+        width: max-content;
+        animation: uc-drift 40s linear infinite;
     }
 
-    @keyframes uc-pulse {
-        0%, 100% { opacity: 0.4; transform: scale(1); }
-        50%      { opacity: 0.9; transform: scale(1.08); }
+    .uc-row span {
+        font-family: var(--uc-font-display);
+        font-size: clamp(3.6rem, 13vw, 13rem);
+        font-weight: 700;
+        line-height: 0.85;
+        letter-spacing: -0.075em;
+        white-space: nowrap;
+        padding-right: clamp(1.1rem, 3vw, 3rem);
+        color: transparent;
+        -webkit-text-stroke: 1px rgba(14, 30, 39, 0.2);
     }
 
-    .uc-eyebrow {
-        text-transform: uppercase;
-        letter-spacing: 0.28em;
-        font-size: 0.72rem;
-        font-weight: 600;
-        color: var(--uc-accent);
-        margin: 0 0 1.25rem 0;
-        opacity: 0;
-        animation: uc-fade-up 0.7s ease 0.1s forwards;
+    .uc-row--bottom {
+        animation-direction: reverse;
     }
 
-    .uc-title {
-        font-size: clamp(2.4rem, 6vw, 4rem);
-        line-height: 1.05;
-        font-weight: 600;
-        margin: 0 0 1.4rem 0;
-        letter-spacing: -0.02em;
+    .uc-row--bottom span {
+        color: var(--uc-text);
+        -webkit-text-stroke: 0;
+    }
+
+    @keyframes uc-drift {
+        from { transform: translate3d(0, 0, 0); }
+        to   { transform: translate3d(-50%, 0, 0); }
+    }
+
+    /* Middle: copy on the left, headline on the right */
+    .uc-middle {
+        display: grid;
+        grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.2fr);
+        gap: clamp(1.5rem, 6vw, 6rem);
+        align-items: end;
+    }
+
+    .uc-copy {
+        display: grid;
+        gap: clamp(1rem, 3vh, 1.75rem);
         opacity: 0;
         animation: uc-fade-up 0.7s ease 0.2s forwards;
     }
 
-    .uc-title em {
-        font-style: italic;
-        color: var(--uc-accent);
+    .uc-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin: 0;
+        font-family: var(--uc-font-display);
+        font-size: clamp(0.72rem, 0.65rem + 0.28vw, 0.9rem);
+        font-weight: 600;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: rgba(14, 30, 39, 0.62);
+    }
+
+    .uc-meta span + span {
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .uc-meta span + span::before {
+        content: "";
+        width: 36px;
+        height: 1px;
+        background: rgba(14, 30, 39, 0.28);
     }
 
     .uc-sub {
-        font-size: 1.075rem;
-        line-height: 1.7;
-        color: var(--uc-text-dim);
-        margin: 0 auto 2.5rem auto;
-        max-width: 460px;
-        opacity: 0;
-        animation: uc-fade-up 0.7s ease 0.3s forwards;
+        margin: 0;
+        max-width: 46ch;
+        font-size: clamp(1rem, 0.9rem + 0.4vw, 1.18rem);
+        line-height: 1.85;
+        letter-spacing: 0.02em;
+        color: var(--uc-muted);
     }
 
-    .uc-divider {
-        width: 48px;
-        height: 1px;
-        background: var(--uc-line);
-        margin: 0 auto 2.5rem auto;
-        opacity: 0;
-        animation: uc-fade-up 0.7s ease 0.35s forwards;
+    .uc-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
     }
 
-    .uc-contact {
-        opacity: 0;
-        animation: uc-fade-up 0.7s ease 0.45s forwards;
-    }
-
-    .uc-contact-label {
-        display: block;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.18em;
-        color: var(--uc-text-dim);
-        margin-bottom: 0.85rem;
-    }
-
-    .uc-contact a {
+    .uc-btn {
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.85rem 1.6rem;
-        border: 1px solid var(--uc-accent);
-        border-radius: 10px;
+        gap: 8px;
+        padding: 13px 26px;
+        border: 1.5px solid var(--uc-border-2);
+        border-radius: 999px;
+        background: transparent;
         color: var(--uc-text);
-        text-decoration: none;
-        font-weight: 500;
+        font-family: var(--uc-font-display);
         font-size: 0.95rem;
-        transition: background 0.25s ease, transform 0.25s ease;
+        font-weight: 600;
+        text-decoration: none;
+        transition: transform 0.18s cubic-bezier(.16, 1, .3, 1), background 0.18s ease, box-shadow 0.18s ease;
     }
 
-    .uc-contact a:hover {
-        background: var(--uc-accent);
-        color: #0e1116;
-        transform: translateY(-2px);
+    .uc-btn svg { width: 17px; height: 17px; }
+
+    .uc-btn--primary {
+        background: linear-gradient(135deg, var(--uc-dark), var(--uc-dark-2));
+        border-color: var(--uc-dark);
+        color: var(--uc-cream);
+        box-shadow: 0 2px 0 rgba(21, 21, 21, 0.18);
     }
 
-    .uc-contact a svg {
-        width: 17px;
-        height: 17px;
+    .uc-btn--primary:hover {
+        background: linear-gradient(135deg, var(--uc-dark-2), var(--uc-dark));
+        box-shadow: 0 10px 30px rgba(7, 21, 31, 0.22);
+        transform: translateY(-1px);
+    }
+
+    .uc-title {
+        margin: 0;
+        font-family: var(--uc-font-display);
+        font-size: clamp(3rem, 7.5vw, 8rem);
+        font-weight: 700;
+        line-height: 0.86;
+        letter-spacing: -0.07em;
+        text-align: right;
+        color: var(--uc-text);
+        opacity: 0;
+        animation: uc-fade-up 0.8s ease 0.1s forwards;
+    }
+
+    .uc-title em {
+        font-family: 'EB Garamond', Georgia, serif;
+        font-style: italic;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        background: linear-gradient(110deg, var(--uc-accent), var(--uc-accent-blue) 56%, var(--uc-accent-warm));
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: uc-grad 8s linear infinite;
+    }
+
+    @keyframes uc-grad {
+        from { background-position: 0% 50%; }
+        to   { background-position: 200% 50%; }
     }
 
     .uc-footer {
-        position: absolute;
-        bottom: 1.75rem;
-        left: 0;
-        right: 0;
-        text-align: center;
-        font-size: 0.78rem;
-        color: var(--uc-text-dim);
-        z-index: 2;
-        opacity: 0;
-        animation: uc-fade-up 0.7s ease 0.6s forwards;
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--uc-border);
+        font-size: 0.8rem;
+        color: rgba(14, 30, 39, 0.55);
     }
 
     @keyframes uc-fade-up {
@@ -218,8 +254,19 @@
         to   { opacity: 1; transform: translateY(0); }
     }
 
-    @media (max-width: 550px) {
-        .uc-content { padding: 1.5rem; }
+    @keyframes uc-pulse {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.35; }
+    }
+
+    @media (max-width: 760px) {
+        .uc-middle { grid-template-columns: 1fr; }
+        .uc-title { text-align: left; order: -1; }
+        .uc-footer { flex-direction: column; gap: 0.35rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .uc-page *, .uc-page *::before { animation: none !important; opacity: 1 !important; transition: none !important; }
     }
 </style>
 
@@ -230,41 +277,45 @@
     $uc_name  = (defined('OUR_NAME') && OUR_NAME !== '') ? OUR_NAME : 'Your Company';
 ?>
 
-<div class="uc-page uc-body-font">
-    <div class="uc-grid"></div>
-    <div class="uc-glow"></div>
+<div class="uc-page">
+    <header class="uc-container uc-bar">
+        <span class="uc-brand"><?= out($uc_name) ?></span>
+        <span class="uc-status">Launching soon</span>
+    </header>
 
-    <div class="uc-content">
-        <div class="uc-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 21h18" />
-                <path d="M5 21V7l8-4v18" />
-                <path d="M19 21V11l-6-4" />
-                <path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01" />
-            </svg>
-        </div>
-
-        <p class="uc-eyebrow">Coming Soon</p>
-
-        <h1 class="uc-title uc-display">Something great is <em>under construction</em></h1>
-
-        <p class="uc-sub">We are putting the finishing touches on our new home. Check back shortly, or reach out if you would like to be the first to know when we launch.</p>
-
-        <div class="uc-divider"></div>
-
-        <div class="uc-contact">
-            <span class="uc-contact-label">Get in touch</span>
-            <a href="mailto:<?= $uc_email ?>">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2" />
-                    <path d="m22 7-10 5L2 7" />
-                </svg>
-                <?= $uc_email ?>
-            </a>
-        </div>
+    <div class="uc-row" aria-hidden="true">
+        <span>Coming soon</span><span>Coming soon</span><span>Coming soon</span><span>Coming soon</span>
     </div>
 
-    <div class="uc-footer">
-        &copy; <?= date('Y') ?> <?= $uc_name ?>. All rights reserved.
+    <main class="uc-container uc-middle">
+        <div class="uc-copy">
+            <p class="uc-meta">
+                <span><?= out($uc_name) ?></span>
+                <span>Coming Soon</span>
+            </p>
+
+            <p class="uc-sub">We are putting the finishing touches on our new site. Check back shortly, or get in touch if you would like to hear the moment we launch.</p>
+
+            <div class="uc-actions">
+                <a class="uc-btn uc-btn--primary" href="mailto:<?= out($uc_email, 'attribute') ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="2" y="4" width="20" height="16" rx="2" />
+                        <path d="m22 7-10 5L2 7" />
+                    </svg>
+                    <?= out($uc_email) ?>
+                </a>
+            </div>
+        </div>
+
+        <h1 class="uc-title">Something <em>great</em><br>is under<br>construction</h1>
+    </main>
+
+    <div class="uc-row uc-row--bottom" aria-hidden="true">
+        <span>Under construction</span><span>Under construction</span><span>Under construction</span><span>Under construction</span>
     </div>
+
+    <footer class="uc-container uc-footer">
+        <span>&copy; <?= date('Y') ?> <?= out($uc_name) ?>. All rights reserved.</span>
+        <span><?= out($uc_email) ?></span>
+    </footer>
 </div>
