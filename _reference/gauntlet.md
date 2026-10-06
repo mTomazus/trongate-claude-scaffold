@@ -1,6 +1,6 @@
 # Gauntlet Loop — Roles and Loop
 
-Read this before starting Tier 2 or Tier 3 work. The tier definitions, Evidence Standard and Stop and Escalation Rules live in `AGENTS.md` §5 and still apply.
+Read this before starting Tier 2 or Tier 3 work. The tier definitions, Evidence Standard and Stop and Escalation Rules live in the Gauntlet Loop section of `AGENTS.md` and still apply.
 
 ## Roles
 

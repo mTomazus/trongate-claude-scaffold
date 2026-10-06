@@ -1,120 +1,70 @@
 # AGENTS.md — Project Operating Manual
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+## Framework
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+This is a **Trongate PHP v2** application. Trongate has its own conventions that differ from Laravel, CodeIgniter, and generic PHP. Always follow Trongate patterns.
 
----
+## Core Trongate Rules
 
-## 1. Think Before Coding
+- Modules live in `modules/[module_name]/`
+- Module names use lowercase snake_case — no hyphens, no `_module` suffix, no PascalCase
+- Controller sits directly in the module folder — no `controllers/` subfolder
+- Controller file: UppercaseFirst snake_case (e.g. `Teams.php`)
+- Class name matches filename without extension (e.g. `class Teams extends Trongate`)
+- Model file sits at the same level as the controller: `Teams_model.php`, extends `Model`
+- All DB work goes through `$this->db` — no raw PDO unless `$this->db` cannot handle it
+- URLs follow: `[base_url]/[module]/[method]/[param]`
+- Views rendered with `$this->view('file', $data)` or `$this->template('admin', $data)`
+- No Eloquent, no Doctrine, no PSR-4 autoloading, no Laravel-style facades
+- No edits to `engine/` unless explicitly asked — that is the Trongate core, not a safe extension point
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+## Third-Party Libraries
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them — don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+**No Composer for application code. Ever.**
 
-## 2. Simplicity First
+If a package's functionality is needed, build it as a Trongate module instead. Never suggest `composer require`, and never introduce a `vendor/` folder.
 
-**Minimum code that solves the problem. Nothing speculative.**
+The single carve-out is developer tooling that never runs in production: a pinned `.phar` in `tools/`, excluded from deploys, never autoloaded by the application. `tools/` is not `vendor/` — nothing under `modules/` may reference anything in it. If a tool has no `.phar` distribution, it does not go in this project.
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+## File Conventions
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+- No trailing `?>` in PHP files
+- snake_case for methods and variables
+- Views are plain PHP files — no Blade, no Twig
+- Config lives in `config/config.php` — never hardcode base URLs
+- One class per file
+- No empty constructors that only call `parent::__construct()`
+- No `namespace` declarations unless the project already uses them
 
-## 3. Surgical Changes
+## Reference Folder
 
-**Touch only what you must. Clean up only your own mess.**
+Use these in order — only go deeper if the current level doesn't cover it:
 
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it — don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
-## 5. Gauntlet Loop
-
-**For complex or risky work, separate implementation from acceptance. Evidence passes the work — not the implementer's confidence.**
-
-### When to Use It
-
-Classify the task before starting:
-
-- **Tier 0 — Trivial:** One-file or mechanical change with an obvious check. Implement, verify, report. Do not create ceremony.
-- **Tier 1 — Standard:** Small, contained feature or bug fix. Plan briefly, implement, run targeted checks, self-review.
-- **Tier 2 — Gauntlet:** Multi-file behavior, unclear interactions, data changes, authentication, billing, scheduling, or meaningful regression risk. Use an implementer plus an independent verifier.
-- **Tier 3 — High risk:** Production data, permissions, security boundaries, destructive operations, or broad architectural changes. Use the Gauntlet Loop plus explicit human approval gates and specialist reviews where relevant.
-
-Do not escalate a simple task merely because multiple agents are available.
-
-For Tier 2 and Tier 3 work, read `_reference/gauntlet.md` before starting. It defines the orchestrator, implementer and verifier roles and the contract → implement → verify loop.
-
-### Evidence Standard
-
-Claims such as "looks good", "should work", or "tests pass" are not sufficient by themselves. Record:
-
-- Exact commands or manual checks performed
-- Relevant outputs and failures
-- Files changed
-- Acceptance criteria satisfied
-- Deviations from the plan and why
-- Remaining risks or unverified behavior
-
-For Tier 2 and Tier 3 work, keep this evidence in the plan's Gauntlet Log section (see `_reference/plans/PLAN_TEMPLATE.md`).
-
-### Stop and Escalation Rules
-
-Stop and ask for human direction before:
-
-- Destructive or irreversible database operations
-- Production deployment or production data changes
-- Editing `engine/`
-- Changing authentication, authorization, billing, or secrets beyond the approved scope
-- Adding a dependency, external service, or recurring cost
-- Expanding the agreed feature scope
-
-Also stop when:
-
-- Requirements are contradictory or insufficient to define acceptance
-- Required verification cannot be run
-- The same failure repeats without a materially different hypothesis or new evidence
-- The next action would trade correctness or safety for merely continuing the loop
-
-Never use "keep going until perfect" as a completion rule. The loop ends when all explicit acceptance criteria pass, required evidence exists, and no unresolved blocking finding remains.
+1. `_reference/trongate-memory.md` — read this first. Dense AI-optimized reference covering core philosophy, architecture, request flow, constants, base classes, DB methods, helpers, security, and common gotchas. Covers 95% of cases.
+2. `_reference/trongate-docs-repo/` — full official Trongate docs cloned from GitHub. Only reference when trongate-memory.md doesn't cover something. Key folders: `php_framework/`, `reference/`, `trongate_css/`, `trongate_mx/`
+3. `_reference/specs/` — plain-language feature requirements (read before planning)
+4. `_reference/plans/` — step-by-step implementation plans (read before coding)
 
 ---
 
-## 6. Verification Tools
+## Workflow
+
+1. Classify the task as Tier 0, 1, 2, or 3 using the Gauntlet Loop rules below. The tier decides which of the following steps apply.
+2. **Tier 2 and 3:** write a spec first (`_reference/specs/FEATURE_NAME.md`) — use `/new-spec [feature name]` to generate from the template.
+3. **Tier 2 and 3:** generate a plan from the spec (`_reference/plans/FEATURE_NAME_plan.md`) — use `/new-plan [spec filename]` to generate from the template.
+4. **Tier 2 and 3:** define acceptance criteria, required checks, forbidden changes, and human approval gates before coding.
+5. Code one bounded task at a time, following the plan where there is one.
+6. Write or update `tests/[module]_test.php` as you go. A route with no test is not finished.
+7. **Any task that changes PHP:** run `php tests/run.php` and `bash tools/phpstan.sh` before marking it complete, and paste both result lines as evidence.
+8. **Tier 2 and 3:** run the Gauntlet Loop and maintain the Gauntlet Log in the plan.
+9. **Tier 2 and 3:** mark a task complete only after its evidence passes independent verification.
+10. Finish with a full-suite run and a concise report of changes, proof, deviations, and remaining risks.
+
+`/new-spec` and `/new-plan` are Claude Code commands. Other agents: open `.claude/commands/new-spec.md` or `.claude/commands/new-plan.md` and follow its steps directly.
+
+---
+
+## Verification Tools
 
 These exist so "verified" means something. Never describe work as tested without having run them.
 
@@ -170,67 +120,115 @@ Fix what it reports. Do not silence it: no `@phpstan-ignore` comments, no new ba
 
 ---
 
-## Framework
+## Gauntlet Loop
 
-This is a **Trongate PHP v2** application. Trongate has its own conventions that differ from Laravel, CodeIgniter, and generic PHP. Always follow Trongate patterns.
+**For complex or risky work, separate implementation from acceptance. Evidence passes the work — not the implementer's confidence.**
 
-## Core Trongate Rules
+### When to Use It
 
-- Modules live in `modules/[module_name]/`
-- Module names use lowercase snake_case — no hyphens, no `_module` suffix, no PascalCase
-- Controller sits directly in the module folder — no `controllers/` subfolder
-- Controller file: UppercaseFirst snake_case (e.g. `Teams.php`)
-- Class name matches filename without extension (e.g. `class Teams extends Trongate`)
-- Model file sits at the same level as the controller: `Teams_model.php`, extends `Model`
-- All DB work goes through `$this->db` — no raw PDO unless `$this->db` cannot handle it
-- URLs follow: `[base_url]/[module]/[method]/[param]`
-- Views rendered with `$this->view('file', $data)` or `$this->template('admin', $data)`
-- No Eloquent, no Doctrine, no PSR-4 autoloading, no Laravel-style facades
+Classify the task before starting:
 
-## Third-Party Libraries
+- **Tier 0 — Trivial:** One-file or mechanical change with an obvious check. Implement, verify, report. Do not create ceremony.
+- **Tier 1 — Standard:** Small, contained feature or bug fix. Plan briefly, implement, run targeted checks, self-review.
+- **Tier 2 — Gauntlet:** Multi-file behavior, unclear interactions, data changes, authentication, billing, scheduling, or meaningful regression risk. Use an implementer plus an independent verifier.
+- **Tier 3 — High risk:** Production data, permissions, security boundaries, destructive operations, or broad architectural changes. Use the Gauntlet Loop plus explicit human approval gates and specialist reviews where relevant.
 
-**No Composer for application code. Ever.**
+Do not escalate a simple task merely because multiple agents are available.
 
-If a package's functionality is needed, build it as a Trongate module instead. Never suggest `composer require`, and never introduce a `vendor/` folder.
+For Tier 2 and Tier 3 work, read `_reference/gauntlet.md` before starting. It defines the orchestrator, implementer and verifier roles and the contract → implement → verify loop.
 
-The single carve-out is developer tooling that never runs in production: a pinned `.phar` in `tools/`, excluded from deploys, never autoloaded by the application. `tools/` is not `vendor/` — nothing under `modules/` may reference anything in it. If a tool has no `.phar` distribution, it does not go in this project.
+### Evidence Standard
 
-## File Conventions
+Claims such as "looks good", "should work", or "tests pass" are not sufficient by themselves. Record:
 
-- No trailing `?>` in PHP files
-- snake_case for methods and variables
-- Views are plain PHP files — no Blade, no Twig
-- Config lives in `config/config.php` — never hardcode base URLs
+- Exact commands or manual checks performed
+- Relevant outputs and failures
+- Files changed
+- Acceptance criteria satisfied
+- Deviations from the plan and why
+- Remaining risks or unverified behavior
 
-## Reference Folder
+For Tier 2 and Tier 3 work, keep this evidence in the plan's Gauntlet Log section (see `_reference/plans/PLAN_TEMPLATE.md`).
 
-Use these in order — only go deeper if the current level doesn't cover it:
+### Stop and Escalation Rules
 
-1. `_reference/trongate-memory.md` — read this first. Dense AI-optimized reference covering core philosophy, architecture, request flow, constants, base classes, DB methods, helpers, security, and common gotchas. Covers 95% of cases.
-2. `_reference/trongate-docs-repo/` — full official Trongate docs cloned from GitHub. Only reference when trongate-memory.md doesn't cover something. Key folders: `php_framework/`, `reference/`, `trongate_css/`, `trongate_mx/`
-3. `_reference/specs/` — plain-language feature requirements (read before planning)
-4. `_reference/plans/` — step-by-step implementation plans (read before coding)
+Stop and ask for human direction before:
 
-## Workflow
+- Destructive or irreversible database operations
+- Production deployment or production data changes
+- Editing `engine/`
+- Changing authentication, authorization, billing, or secrets beyond the approved scope
+- Adding a dependency, external service, or recurring cost
+- Expanding the agreed feature scope
 
-1. Classify the task as Tier 0, 1, 2, or 3 using the Gauntlet rules above.
-2. For feature work, write a spec first (`_reference/specs/FEATURE_NAME.md`) — use `/new-spec [feature name]` to generate from the template.
-3. Generate a plan from the spec (`_reference/plans/FEATURE_NAME_plan.md`) — use `/new-plan [spec filename]` to generate from the template.
-4. Define acceptance criteria, required checks, forbidden changes, and human approval gates before coding.
-5. Code following the plan, one bounded task at a time.
-6. Write or update `tests/[module]_test.php` as you go. A route with no test is not finished.
-7. Run `php tests/run.php` and `bash tools/phpstan.sh` before marking any task complete, and paste both result lines as evidence.
-8. For Tier 2 and Tier 3 work, run the Gauntlet Loop and maintain the Gauntlet Log in the plan.
-9. Mark a task complete only after its evidence passes independent verification.
-10. Finish with a full-suite run and a concise report of changes, proof, deviations, and remaining risks.
+Also stop when:
 
-## What to Avoid
+- Requirements are contradictory or insufficient to define acceptance
+- Required verification cannot be run
+- The same failure repeats without a materially different hypothesis or new evidence
+- The next action would trade correctness or safety for merely continuing the loop
 
-- No edits to `engine/` unless explicitly asked — that is the Trongate core, not a safe extension point
-- No `controllers/` subfolders — that is the old v1 pattern
-- No Composer installs — ever
-- No empty constructors calling `parent::__construct()`
-- No `namespace` declarations unless the project already uses them
-- No rewriting of working code to match style preferences
-- No new dependencies for problems Trongate already handles natively
-- No multiple classes in one file
+Never use "keep going until perfect" as a completion rule. The loop ends when all explicit acceptance criteria pass, required evidence exists, and no unresolved blocking finding remains.
+
+---
+
+## General Guidelines
+
+Behavioral guidelines to reduce common LLM coding mistakes. These bias toward caution over speed. For trivial tasks, use judgment.
+
+### Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- No new dependencies for problems Trongate already handles natively.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+### Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.

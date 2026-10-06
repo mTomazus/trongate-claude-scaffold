@@ -3,7 +3,7 @@
 **Date:** YYYY-MM-DD
 **Spec:** `_reference/specs/[SPEC_FILE].md`
 **Status:** In Progress | Complete | Blocked
-**Tier:** 0 | 1 | 2 | 3 (see AGENTS.md §5)
+**Tier:** 0 | 1 | 2 | 3 (see the Gauntlet Loop section in AGENTS.md)
 
 ## Summary
 One paragraph describing what this plan implements and why.
