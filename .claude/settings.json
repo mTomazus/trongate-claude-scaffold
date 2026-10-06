@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -l:*)",
+      "Bash(php tests/run.php:*)",
+      "Bash(TEST_BASE_URL=*)",
+      "Bash(bash tools/phpstan.sh:*)"
+    ],
+    "deny": [
+      "Edit(engine/**)",
+      "Bash(composer:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "php \"$CLAUDE_PROJECT_DIR/.claude/hooks/php_guard.php\""
+          }
+        ]
+      }
+    ]
+  }
+}

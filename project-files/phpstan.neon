@@ -1,0 +1,47 @@
+# Static analysis config for a Trongate v2 project.
+#
+# Tuned against a real Trongate install. Each setting below exists because
+# without it PHPStan produced hundreds of false positives:
+#
+#   scanDirectories        Trongate's global helpers (post, segment, redirect,
+#                          out, form_label...) live in engine/. Scanning it
+#                          teaches PHPStan they exist without analysing core.
+#   excludePaths           Views receive their variables from extract() inside
+#                          $this->view(). They are templates, not logic, and
+#                          cannot be statically reasoned about.
+#   universalObjectCrates  Trongate::__get() and Model load properties
+#                          dynamically ($this->db, $this->products_model).
+#   dynamicConstantNames   These vary per environment; without this PHPStan
+#                          treats the local value as a literal and reports
+#                          comparisons as always-true/always-false.
+#
+# Run it via tools/phpstan.sh - that wrapper sets the memory limit, without
+# which PHPStan dies mid-run and reports a crash as a single error.
+
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+
+    paths:
+        - modules
+
+    scanDirectories:
+        - engine
+
+    excludePaths:
+        analyseAndScan:
+            - modules/**/views/*
+
+    universalObjectCratesClasses:
+        - Trongate
+        - Model
+
+    dynamicConstantNames:
+        - ENV
+        - BASE_URL
+        - WEBSITE_NAME
+
+    bootstrapFiles:
+        - tools/phpstan-bootstrap.php

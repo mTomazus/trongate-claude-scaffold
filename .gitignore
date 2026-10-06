@@ -1,0 +1,5 @@
+_reference/trongate-docs-repo/
+!_reference/
+!.claude/
+!CLAUDE.md
+.DS_Store
