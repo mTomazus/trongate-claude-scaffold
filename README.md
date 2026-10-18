@@ -10,7 +10,12 @@ A development scaffold for [Trongate PHP v2](https://trongate.io) projects using
 trongate-claude-scaffold/
   AGENTS.md                          # The operating manual for Trongate projects (Codex and other agents read this)
   CLAUDE.md                          # One line, @AGENTS.md, so Claude Code reads the same manual
-  trongate-init.sh                   # Setup script - run once per new project
+  trongate-init.sh                   # Non-destructive project setup; safe to rerun
+  tools/check-scaffold.sh            # Shared offline checks; scaffold repository only
+  tests/
+    installer_test.php               # Installer/deployment regression suite
+    php_guard_test.php               # Convention guard regression suite
+  .github/workflows/scaffold.yml     # Linux/macOS CI using the shared checks
   _reference/
     trongate-memory.md               # AI-optimized Trongate v2 reference (read first)
     gauntlet.md                      # Gauntlet roles and loop, read for Tier 2/3 work
@@ -22,7 +27,7 @@ trongate-claude-scaffold/
       specifier.md                   # Spec -> testable acceptance criteria
       verifier.md                    # Independent check; runs gates, reports findings
     hooks/
-      php_guard.php                  # Enforces AGENTS.md rules on every write
+      php_guard.php                  # Checks PHP conventions after supported Claude edits
     commands/
       new-spec.md                    # /new-spec - create a feature spec
       new-plan.md                    # /new-plan - create a plan from a spec
@@ -101,6 +106,7 @@ homepage controller, homepage view and public template. Flags can be combined.
 The script will create missing files at these paths:
 
 **Claude scaffold:**
+
 - Create `AGENTS.md` and `CLAUDE.md` at the project root
 - Create `_reference/` with the memory file and templates
 - Create `.claude/commands/` with all slash commands
@@ -112,6 +118,7 @@ The script will create missing files at these paths:
 - Clone or fast-forward the Trongate docs in `_reference/trongate-docs-repo/` (unless skipped); failures are reported as warnings
 
 **Project files:**
+
 - Copy `public/css/app.css` (plain CSS components extending `trongate.css`)
 - Add `modules/templates/views/public.php` to load both stylesheets
 - Add `modules/welcome/Welcome.php` with the `/welcome/components` route
@@ -241,8 +248,8 @@ nonzero on the first failed check. It works from any working directory when you
 give the path to the script. Tests use disposable projects and stubbed rsync.
 
 This runner and its tests are not copied into installed projects. They require
-Git, PHP CLI 8.0+ and Bash; no server or downloaded tooling is needed. Installer coverage includes first runs,
-reruns, force/reset, legacy and interrupted state, settings validation/merging,
+Git, PHP CLI 8.0+ and Bash; no server or downloaded tooling is needed. Installer
+coverage includes first runs, reruns, force/reset, legacy and interrupted state, settings validation/merging,
 read-only dry-run, symlink rejection, backups and deployment arguments.
 
 `.github/workflows/scaffold.yml` runs this same command on pushes and pull
@@ -258,9 +265,17 @@ The installed scaffold ships two gates so that "it works" is something you can c
 
 ### Convention guard
 
-`.claude/hooks/php_guard.php` runs automatically after every file Claude writes or edits. It rejects syntax errors, trailing `?>`, `controllers/` subfolders, non-snake_case module folders, multiple classes in one file, a class name that does not match its filename, empty `parent::__construct()` constructors, stray `namespace` declarations, and anything Composer-shaped.
+The bundled Claude settings register `.claude/hooks/php_guard.php` after
+`Write`, `Edit` and `MultiEdit` tool calls. It reports syntax errors, trailing
+`?>`, `controllers/` subfolders, non-snake_case module folders, multiple classes
+in one file, class/filename mismatches, empty `parent::__construct()` constructors,
+and namespaces when no existing module uses them. It also flags `composer.json`,
+paths under `vendor/`, and the Composer commands it checks for in PHP files.
 
-These are the same rules already written in `AGENTS.md`. The difference is that a hook is enforced and prose is not.
+The guard checks a subset of `AGENTS.md` conventions after a write; it does not
+undo changes or cover files written through Bash. Files under `.claude/` are
+skipped. Codex and other agents must invoke the guard explicitly for changed PHP
+files, as directed by `AGENTS.md`. Guard exits are `0` clean and `2` violations.
 
 If you change the guard, run its tests from the scaffold folder (they are not copied into projects):
 
@@ -297,18 +312,30 @@ Enable it once per project:
 bash tools/install-phpstan.sh
 ```
 
-That downloads a pinned `phpstan.phar` into `tools/` and generates `phpstan-baseline.neon`, which records the errors already present in Trongate's core modules so they never surface again. From then on the analyser only reports problems in code you wrote.
+This downloads the configured PHPStan version into `tools/phpstan.phar` if no
+PHAR is present, then attempts to generate `phpstan-baseline.neon` for all
+configured module paths. Existing custom modules are included; baseline entries
+can suppress findings in those modules too. Rerunning the installer regenerates
+the baseline, so review changes before accepting them.
+
+The current installer tolerates baseline-generation failures and still prints
+its completion message. That message does not establish a clean analysis; run
+the wrapper below and inspect its exit code and findings.
 
 ```bash
 bash tools/phpstan.sh                 # everything
 bash tools/phpstan.sh modules/teams   # one module
 ```
 
-Always use the wrapper. At PHP's default 128M limit PHPStan dies partway through and reports the crash as a single error, which looks like a nearly-clean result.
+Use the wrapper to set PHPStan's memory limit to 1G. A memory error is a failed
+analysis, even if only one error is reported.
 
 The `.phar` is dev tooling, not an application dependency — gitignored, never autoloaded, never deployed. `tools/` is not `vendor/`, and the no-Composer rule still holds for everything the application actually runs.
 
-Exit codes for both gates: `0` clean, `1` real findings, `2` could not run. **Exit 2 is never a pass.**
+The wrapper exits `2` when the PHAR is missing; otherwise it forwards PHPStan's
+exit status. Treat every nonzero status as a failed or unavailable check and
+inspect the output. The convention guard's exit codes are described separately
+above; its exit `2` means violations.
 
 ---
 
