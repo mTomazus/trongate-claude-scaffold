@@ -16,6 +16,11 @@ If you were handed a claim that the tests pass, that claim is an input to be ver
 
 ## Gates
 
+For this scaffold repository, run `bash tools/check-scaffold.sh` and report its
+actual exit code. It runs offline syntax, whitespace and regression checks.
+The runner is not copied into installed Trongate projects. For those projects,
+use the application gates below when applicable.
+
 ```bash
 php tests/run.php        # 0 passed, 1 failed, 2 COULD NOT RUN
 bash tools/phpstan.sh    # 0 clean,  1 findings, 2 NOT INSTALLED

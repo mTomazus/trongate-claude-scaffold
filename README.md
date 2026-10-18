@@ -1,6 +1,6 @@
 # Trongate Claude Scaffold
 
-A scaffold for working with [Trongate PHP v2](https://trongate.io) and Claude Code in VS Code. Run one command on any new Trongate project to get a fully configured Claude environment with reference docs, spec and plan templates, slash commands, and verification gates. Styling stays on Trongate's own `css/trongate.css` — no build step, no dependencies.
+A development scaffold for [Trongate PHP v2](https://trongate.io) projects using Claude Code or Codex. Run one command from a Trongate project to install shared agent instructions, reference docs, spec and plan templates, slash commands, and verification gates. Styling stays on Trongate's own `css/trongate.css` — no build step, no dependencies.
 
 ---
 
@@ -10,7 +10,12 @@ A scaffold for working with [Trongate PHP v2](https://trongate.io) and Claude Co
 trongate-claude-scaffold/
   AGENTS.md                          # The operating manual for Trongate projects (Codex and other agents read this)
   CLAUDE.md                          # One line, @AGENTS.md, so Claude Code reads the same manual
-  trongate-init.sh                   # Setup script - run once per new project
+  trongate-init.sh                   # Non-destructive project setup; safe to rerun
+  tools/check-scaffold.sh            # Shared offline checks; scaffold repository only
+  tests/
+    installer_test.php               # Installer/deployment regression suite
+    php_guard_test.php               # Convention guard regression suite
+  .github/workflows/scaffold.yml     # Linux/macOS CI using the shared checks
   _reference/
     trongate-memory.md               # AI-optimized Trongate v2 reference (read first)
     gauntlet.md                      # Gauntlet roles and loop, read for Tier 2/3 work
@@ -22,11 +27,11 @@ trongate-claude-scaffold/
       specifier.md                   # Spec -> testable acceptance criteria
       verifier.md                    # Independent check; runs gates, reports findings
     hooks/
-      php_guard.php                  # Enforces AGENTS.md rules on every write
+      php_guard.php                  # Checks PHP conventions after supported Claude edits
     commands/
       new-spec.md                    # /new-spec - create a feature spec
       new-plan.md                    # /new-plan - create a plan from a spec
-      commit.md                      # /commit - stage, commit, and push
+      commit.md                      # /commit - review and commit; push only when requested
       security-audit.md              # /security-audit - full codebase security scan
       update-docs.md                 # /update-docs - pull latest Trongate docs
   project-files/                     # Mirrors the destination paths in your project
@@ -44,17 +49,17 @@ trongate-claude-scaffold/
       welcome/Welcome.php            # Controller: homepage + /welcome/components
       welcome/views/default_homepage.php   # Under-construction page
       welcome/views/components_showcase.php # Component reference
-    deploy.sh                        # Deploy helper, installed one level above the project
-    .deploy.env                      # Server settings deploy.sh reads, installed beside it
+    deploy.sh                        # Project-local rsync + SSH deployment helper
+    .deploy.env                      # Project-local server settings (gitignored on install)
 ```
 
-The `project-files/` folder mirrors the exact paths these files will land at in your Trongate project. The init script simply copies them across.
+The `project-files/` folder mirrors the exact paths these files will land at in your Trongate project. The installer creates missing files and preserves existing files by default.
 
-When you run `trongate-init`, it also clones the [official Trongate docs repo](https://github.com/trongate/trongate-docs) into `_reference/trongate-docs-repo/` for deep reference when needed.
+Unless you use `--skip-docs` or `--dry-run`, `trongate-init` clones or updates the [official Trongate docs repo](https://github.com/trongate/trongate-docs) into `_reference/trongate-docs-repo/` for deep reference when needed.
 
 ### Claude Code and Codex
 
-The manual lives in `AGENTS.md`, which Codex and most other coding agents read. Claude Code only reads `CLAUDE.md`, so that file holds a single line, `@AGENTS.md`, which imports the manual. Edit `AGENTS.md`; leave `CLAUDE.md` alone.
+The shared manual lives in `AGENTS.md`. The bundled `CLAUDE.md` contains `@AGENTS.md` so Claude Code imports the same instructions. Existing instruction files are preserved, including with `--force`; the installer warns if an existing `CLAUDE.md` lacks that import. Review custom instructions for consistency.
 
 The slash commands, agents and the `php_guard` hook under `.claude/` are Claude Code features. Other agents don't run the hook automatically; `AGENTS.md` tells them how to run it by hand.
 
@@ -87,47 +92,118 @@ Navigate to the root of any new Trongate project and run:
 trongate-init
 ```
 
-The script will:
+Preview the installation without writing files, creating temporary files, changing
+permissions, or fetching documentation:
+
+```bash
+trongate-init --dry-run
+```
+
+The installer supports `--skip-docs` for offline installation, `--force` for
+refreshing managed files, and `--reset-homepage` for explicitly replacing the
+homepage controller, homepage view and public template. Flags can be combined.
+
+The script will create missing files at these paths:
 
 **Claude scaffold:**
+
 - Create `AGENTS.md` and `CLAUDE.md` at the project root
 - Create `_reference/` with the memory file and templates
 - Create `.claude/commands/` with all slash commands
-- Create `.claude/settings.json` and `.claude/hooks/php_guard.php` (convention gate)
+- Create `.claude/settings.json` and `.claude/hooks/php_guard.php` (convention gate); existing settings receive only missing template deny rules and hooks
 - Create `.claude/agents/` with the specifier and verifier agents
 - Create `phpstan.neon` and `tools/` (static analysis, enabled with one command)
 - Create `tests/` with the HTTP test runner and a worked example
 - Merge preferred Trongate defaults into `.gitignore` (existing entries are kept)
-- Clone the latest Trongate docs into `_reference/trongate-docs-repo/`
+- Clone or fast-forward the Trongate docs in `_reference/trongate-docs-repo/` (unless skipped); failures are reported as warnings
 
 **Project files:**
+
 - Copy `public/css/app.css` (plain CSS components extending `trongate.css`)
-- Replace `modules/templates/views/public.php` to load both stylesheets
-- Replace `modules/welcome/Welcome.php` to add the `/welcome/components` route
-- Replace `modules/welcome/views/default_homepage.php` with an under-construction page
+- Add `modules/templates/views/public.php` to load both stylesheets
+- Add `modules/welcome/Welcome.php` with the `/welcome/components` route
+- Add `modules/welcome/views/default_homepage.php`, an under-construction page
 - Add `modules/welcome/views/components_showcase.php`
-- Create `../deploy.sh` and `../.deploy.env` if they do not already exist (`DEPLOY_SOURCE` is set to this project's folder name)
+- Create `./deploy.sh` and `./.deploy.env` in the project root if missing; parent-directory deployment files are untouched
 
-The script refuses to run outside a Trongate project root (it checks for `engine/` and `modules/`). It is safe to re-run: on a project that has already been initialised, any file you have changed is kept and reported. `trongate-init --force` replaces those with the scaffold's version. `AGENTS.md`, `CLAUDE.md`, `tests/welcome_test.php` and `.claude/settings.json` are never replaced without `--force` (settings.json not even then).
+The installer requires `engine/`, `modules/welcome/views/`, and
+`modules/templates/views/`. It checks required sources, destination paths,
+installation state, and Claude settings before writing. Symlinks at managed
+file paths, their parent directories, or the backup directory are rejected.
+Settings with integers outside PHP's exact integer range are rejected before
+writing to avoid silently rounding custom values. It never edits `engine/`.
 
-Any existing file the script replaces — on a first run or with `--force` — is copied to `.trongate-init-backup/<timestamp>/` first, under the same path, and the script lists what it backed up. That folder is added to `.gitignore`; delete it once you've checked nothing you need was in it.
+Existing files are preserved on the first run and on reruns, with these policies:
+
+| Files | Update policy |
+| --- | --- |
+| Managed tooling, references, commands, hooks, CSS and deploy helper | Replace only with `--force`, with backups |
+| Welcome controller, homepage view and public template | Replace only with `--reset-homepage`, even with `--force` |
+| `AGENTS.md`, `CLAUDE.md`, `tests/welcome_test.php`, `.deploy.env` | Never replace existing contents |
+| `.claude/settings.json` | Add missing template deny rules/hooks; preserve custom permissions, hooks, values and JSON types; back up changes |
+| `.gitignore` | Append missing ignore entries; preserve existing contents and back up changes |
+
+Existing `.deploy.env` permissions are restricted to `600` on real installations.
+Retained custom scripts keep their executable modes. Newly installed scripts are
+made executable. `.trongate-init-state` records installation progress; legacy and
+interrupted installations follow the same preservation rules.
+
+Backups live in `.trongate-init-backup/<timestamp>-<unique>/` under their original
+relative paths. The folder is gitignored and excluded from deployment. Review
+backups before removing them. Installation is not a transaction: if a copy or
+filesystem operation fails after preflight, completed steps remain; rerun after
+fixing the error.
 
 ---
 
 ## Deploying
 
-`../deploy.sh` syncs the project folder named by `DEPLOY_SOURCE` to your server over rsync + SSH. All settings live in `../.deploy.env`. Fill in your server details, set up key auth once (`ssh-copy-id`), then:
+`./deploy.sh` syncs the contents of its own project root over rsync + SSH,
+regardless of your current directory. Edit the project-local `.deploy.env`:
 
 ```bash
-../deploy.sh          # dry run - shows what would change
-../deploy.sh --live   # real deploy, asks for confirmation
+DEPLOY_USER=your_user
+DEPLOY_HOST=your_server.example
+DEPLOY_PORT=22
+DEPLOY_REMOTE_PATH=/home/your_user/public_html/
 ```
 
-It never sends `config/`, `tests/`, `tools/`, `_reference/`, `.claude/`, PHPStan config or the deploy files themselves, and it refuses to sync a folder that is not a Trongate project. It uses `--delete`, so always look at the dry run first.
+This is a trusted shell file sourced by the helper; do not put passwords or
+untrusted commands in it. Destination settings must come from this file;
+inherited `DEPLOY_*` environment values are cleared. Use SSH key authentication.
+The helper accepts simple
+SSH usernames, DNS/IPv4 hosts, ports 1–65535, and absolute remote paths containing
+letters, numbers, underscores, dots, slashes and hyphens. Root-only and `.`/`..`
+path segments are rejected. Paths containing spaces and IPv6 hosts are not
+supported.
+
+```bash
+./deploy.sh          # rsync preview; contacts the server, transfers no files
+./deploy.sh --live   # real deployment, requires affirmative confirmation
+```
+
+The default preview uses `rsync --dry-run`: it contacts SSH and may use/update SSH
+client state. The installer's `--dry-run` is entirely offline and performs no
+writes. Live deployment uses `--delete`; review the preview and destination first.
+
+The helper excludes `config/`, development tooling/tests, references, AI settings
+and instructions, Git metadata, installer backups/state, and both deployment
+files. Excluded server files are preserved by rsync. Set up production `config/`
+and the database separately before deployment.
+
+For older installations, parent-directory helpers and credentials are left
+untouched. Review them manually before migration: the new helper belongs inside
+the project, uses no `DEPLOY_SOURCE`, and replaces `DEPLOY_PATH` with
+`DEPLOY_REMOTE_PATH`. Existing project-local credentials are never rewritten;
+legacy keys cause the new helper to stop. `trongate-init --force` can back up and
+refresh an existing project-local helper, but credentials still need manual review.
 
 **Check before your first live deploy:** Trongate expects `public/` to be the only web-exposed folder. If your host points the domain at the folder you deploy into (e.g. `public_html`), make sure `config/`, `engine/` and `modules/` cannot be fetched over HTTP.
 
-Visit your project in the browser to see the under-construction page, and `/welcome/components` for the component reference.
+When the demo templates have been installed, visit the project homepage and
+`/welcome/components` to inspect them. Preserved custom controllers/templates may
+not expose the demo route or load the bundled CSS; integrate those changes manually
+or explicitly use `--reset-homepage`.
 
 ---
 
@@ -139,7 +215,7 @@ Open Claude Code in VS Code and use these from any project:
 | --- | --- |
 | `/new-spec [feature name]` | Creates a spec file in `_reference/specs/` |
 | `/new-plan [spec filename]` | Creates an implementation plan from a spec |
-| `/commit` | Stages all changes, writes a commit message, and pushes |
+| `/commit` | Reviews and commits changes; pushes only with the `push` argument |
 | `/security-audit` | Scans the codebase for security issues |
 | `/update-docs` | Pulls the latest Trongate docs from GitHub |
 
@@ -158,13 +234,48 @@ php tests/run.php          # must exit 0 before the work counts as done
 
 ## Verification Gates
 
-The scaffold ships two gates so that "it works" is something you can check rather than something Claude asserts.
+Claude Code and Codex use the same verification command in this repository:
+
+```bash
+bash tools/check-scaffold.sh
+# Also check whitespace in committed changes since a base revision:
+bash tools/check-scaffold.sh BASE_REVISION
+```
+
+The command checks active PHP/Bash syntax, staged and unstaged whitespace, and
+runs `php tests/installer_test.php` and `php tests/php_guard_test.php`. It exits
+nonzero on the first failed check. It works from any working directory when you
+give the path to the script. Tests use disposable projects and stubbed rsync.
+
+This runner and its tests are not copied into installed projects. They require
+Git, PHP CLI 8.0+ and Bash; no server or downloaded tooling is needed. Installer
+coverage includes first runs, reruns, force/reset, legacy and interrupted state, settings validation/merging,
+read-only dry-run, symlink rejection, backups and deployment arguments.
+
+`.github/workflows/scaffold.yml` runs this same command on pushes and pull
+requests, using Linux and macOS runners with PHP 8.3. CI checks whitespace over
+the pushed or proposed commit range as well as running the suites. For a new
+branch with no previous tip, it checks the tip commit's whitespace; opening a
+pull request checks the full proposed range. Actions are
+pinned to commit hashes, checkout credentials are not retained, and repository
+permissions are read-only. CI prepares the runtime before the offline checks;
+it has no deployment step or deployment credentials.
+
+The installed scaffold ships two gates so that "it works" is something you can check rather than something Claude asserts.
 
 ### Convention guard
 
-`.claude/hooks/php_guard.php` runs automatically after every file Claude writes or edits. It rejects syntax errors, trailing `?>`, `controllers/` subfolders, non-snake_case module folders, multiple classes in one file, a class name that does not match its filename, empty `parent::__construct()` constructors, stray `namespace` declarations, and anything Composer-shaped.
+The bundled Claude settings register `.claude/hooks/php_guard.php` after
+`Write`, `Edit` and `MultiEdit` tool calls. It reports syntax errors, trailing
+`?>`, `controllers/` subfolders, non-snake_case module folders, multiple classes
+in one file, class/filename mismatches, empty `parent::__construct()` constructors,
+and namespaces when no existing module uses them. It also flags `composer.json`,
+paths under `vendor/`, and the Composer commands it checks for in PHP files.
 
-These are the same rules already written in `AGENTS.md`. The difference is that a hook is enforced and prose is not.
+The guard checks a subset of `AGENTS.md` conventions after a write; it does not
+undo changes or cover files written through Bash. Files under `.claude/` are
+skipped. Codex and other agents must invoke the guard explicitly for changed PHP
+files, as directed by `AGENTS.md`. Guard exits are `0` clean and `2` violations.
 
 If you change the guard, run its tests from the scaffold folder (they are not copied into projects):
 
@@ -201,18 +312,30 @@ Enable it once per project:
 bash tools/install-phpstan.sh
 ```
 
-That downloads a pinned `phpstan.phar` into `tools/` and generates `phpstan-baseline.neon`, which records the errors already present in Trongate's core modules so they never surface again. From then on the analyser only reports problems in code you wrote.
+This downloads the configured PHPStan version into `tools/phpstan.phar` if no
+PHAR is present, then attempts to generate `phpstan-baseline.neon` for all
+configured module paths. Existing custom modules are included; baseline entries
+can suppress findings in those modules too. Rerunning the installer regenerates
+the baseline, so review changes before accepting them.
+
+The current installer tolerates baseline-generation failures and still prints
+its completion message. That message does not establish a clean analysis; run
+the wrapper below and inspect its exit code and findings.
 
 ```bash
 bash tools/phpstan.sh                 # everything
 bash tools/phpstan.sh modules/teams   # one module
 ```
 
-Always use the wrapper. At PHP's default 128M limit PHPStan dies partway through and reports the crash as a single error, which looks like a nearly-clean result.
+Use the wrapper to set PHPStan's memory limit to 1G. A memory error is a failed
+analysis, even if only one error is reported.
 
 The `.phar` is dev tooling, not an application dependency — gitignored, never autoloaded, never deployed. `tools/` is not `vendor/`, and the no-Composer rule still holds for everything the application actually runs.
 
-Exit codes for both gates: `0` clean, `1` real findings, `2` could not run. **Exit 2 is never a pass.**
+The wrapper exits `2` when the PHAR is missing; otherwise it forwards PHPStan's
+exit status. Treat every nonzero status as a failed or unavailable check and
+inspect the output. The convention guard's exit codes are described separately
+above; its exit `2` means violations.
 
 ---
 
@@ -243,9 +366,13 @@ Claude reads reference files in this order to keep token usage low:
 ## Requirements
 
 - macOS with zsh (or any Unix with bash)
-- Git
-- [Claude Code](https://claude.ai/code) installed in VS Code
+- Bash and standard Unix tools (tested with macOS Bash 3.2)
+- PHP CLI 8.0+ (settings validation and scaffold tests)
+- Git for reference documentation updates; use `--skip-docs` to work offline
+- Claude Code or Codex for agent-assisted development
 - A Trongate v2 project
+- rsync and SSH only when using the deployment helper
+- PHP curl extension and a running application for installed-project HTTP tests
 
 ---
 
