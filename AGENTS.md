@@ -73,6 +73,10 @@ Claude Code may use `/new-spec` and `/new-plan` when those commands exist. Codex
 
 Repository tool notes:
 
+- In the scaffold repository itself, run `bash tools/check-scaffold.sh` before
+  committing scaffold changes. This is the shared Claude Code/Codex entry point
+  for offline syntax, whitespace and regression checks. It is not installed into
+  Trongate projects and does not run their HTTP or PHPStan gates.
 - `tests/run.php` performs HTTP tests; the application may need a running server. An unavailable suite is **not** a pass.
 - `tools/phpstan.sh` is the preferred PHPStan entry point; do not invoke the `.phar` directly when the wrapper exists.
 - Claude Code may run `.claude/hooks/php_guard.php` automatically. Other agents should invoke it for changed PHP files if present; it supplements, not replaces, tests.
