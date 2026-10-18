@@ -30,3 +30,16 @@ separately and cannot establish scaffold script correctness.
   mktemp; README describes obsolete parent-directory deployment.
 - No deployment, network test, push, dependency installation or engine change
   is authorized by this plan.
+- Deployment commit `750a398`: Bash syntax check of installer, deploy script and
+  env template, plus `git diff --check`: exit 0.
+- Installer regression development: first run 24 tests, 22 passed, 2 failed
+  (live-repository metadata snapshot and an unquoted invalid shell-config
+  fixture). Corrected the fixtures; next run 24/24 passed. Isolated the source
+  snapshot from live Git metadata and added missing/invalid source coverage;
+  expanded run: 25 tests, 25 passed, 0 failed, exit 0.
+- `php tests/php_guard_test.php`: 19 tests, 19 passed, 0 failed, exit 0.
+- `php -l tests/installer_test.php`: no syntax errors, exit 0. Guard invocation
+  and Bash syntax checks produced no findings. Bash is macOS 3.2.57.
+- Policy: preserve contents and executable modes of retained custom scripts;
+  `.deploy.env` alone is deliberately restricted to mode 600 on real installs.
+  Installer state and additive gitignore/settings merges are documented writes.

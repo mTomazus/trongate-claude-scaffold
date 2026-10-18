@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Trongate Scaffold Installer v2
-# Usage: bash trongate-init-v2.sh [--dry-run] [--force] [--reset-homepage] [--skip-docs]
+# Usage: bash trongate-init.sh [--dry-run] [--force] [--reset-homepage] [--skip-docs]
 # Run FROM a Trongate v2 project root. Place this script in the scaffold source.
-# First installation replaces the Welcome controller/homepage and public template.
-# Subsequent installations preserve those 3 files, even with --force.
+# Existing files are preserved by default, including on first installation.
+# Homepage files are protected even with --force.
 # The opt-in --reset-homepage flag replaces them again (with backups).
 
 set -euo pipefail
@@ -19,10 +19,11 @@ SKIP_DOCS=0
 FIRST_RUN=0
 BACKED_UP=0
 BACKUP_DIR=""
+MERGED_SETTINGS=""
 
 usage() {
   cat <<'EOF'
-Usage: bash trongate-init-v2.sh [options]
+Usage: bash trongate-init.sh [options]
 
   --dry-run         Preview actions; do not modify any files or fetch docs
   --force           Refresh scaffold-managed files (back up replacements);
@@ -51,12 +52,13 @@ done
 
 # Reject symlinks and non-files before reading/writing an installer-managed path.
 check_dest() {
-  local dest="$TARGET_DIR/$1" parent="$TARGET_DIR" segment
-  local -a segments=()
-  IFS='/' read -r -a segments <<< "$1"
-  for segment in "${segments[@]:0:${#segments[@]}-1}"; do
+  local dest="$TARGET_DIR/$1" parent="$TARGET_DIR" segment rest="$1"
+  while [[ "$rest" == */* ]]; do
+    segment="${rest%%/*}"
+    rest="${rest#*/}"
     parent="$parent/$segment"
     [ ! -L "$parent" ] || fail "Refusing symlinked parent directory: $parent"
+    [ ! -e "$parent" ] || [ -d "$parent" ] || fail "Expected a directory: $parent"
   done
   [ ! -L "$dest" ] || fail "Refusing symlink destination: $1"
   [ ! -e "$dest" ] || [ -f "$dest" ] || fail "Expected a regular file: $1"
@@ -75,7 +77,7 @@ preflight() {
   [ -d "$TARGET_DIR/modules/templates/views" ] ||
     fail "Expected modules/templates/views/; refusing an unknown layout."
   command -v php >/dev/null 2>&1 || fail "PHP CLI is required to validate and merge Claude settings."
-  for cmd in cmp cp mkdir mktemp sed grep chmod mv; do
+  for cmd in cmp cp mkdir mktemp grep chmod mv head date cat; do
     command -v "$cmd" >/dev/null 2>&1 || fail "Missing required command: $cmd"
   done
   [ -w "$TARGET_DIR" ] || fail "Project root is not writable: $TARGET_DIR"
@@ -122,19 +124,10 @@ preflight() {
     check_dest "$rel"
   done
 
-  # Validate JSON syntax and root types before planning any writes.
-  php -r '
-    foreach (array_slice($argv, 1) as $file) {
-      if (!is_file($file)) continue;
-      try {
-        $data = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
-        if (!is_object(json_decode(file_get_contents($file), false, 512, JSON_THROW_ON_ERROR))) throw new Exception("Expected JSON object");
-      } catch (Throwable $e) {
-        fwrite(STDERR, "Invalid Claude settings JSON in {$file}: {$e->getMessage()}\n");
-        exit(1);
-      }
-    }
-  ' "$SCAFFOLD_DIR/.claude/settings.json" "$TARGET_DIR/.claude/settings.json" || fail "Settings validation failed."
+  [ ! -L "$TARGET_DIR/.trongate-init-backup" ] || fail "Refusing symlinked backup directory."
+  [ ! -e "$TARGET_DIR/.trongate-init-backup" ] || [ -d "$TARGET_DIR/.trongate-init-backup" ] || fail "Expected a backup directory."
+  # Merge in memory, even during dry-run. Validate before any state/file writes.
+  prepare_claude_settings
 
   grep -qF '# TRONGATE_DEPLOY_V2' "$SCAFFOLD_DIR/project-files/deploy.sh" ||
     fail "Your project-files/deploy.sh is the old parent-directory version. Replace it with the bundled v2 deploy template first."
@@ -208,9 +201,9 @@ backup_file() {
   BACKED_UP=$((BACKED_UP + 1))
 }
 
-# Policies: managed (initial or --force), once (first creation only),
+# Policies: managed (--force only), once (first creation only),
 # force-only (create if missing, or refresh only with --force),
-# homepage (first run only, even --force; --reset-homepage is explicit).
+# homepage (--reset-homepage only, even with --force).
 install_file() {
   local src="$1" rel="$2" policy="${3:-managed}"
   local dest="$TARGET_DIR/$rel"
@@ -229,11 +222,11 @@ install_file() {
       return
     fi
     if [ "$policy" = homepage ]; then
-      if [ "$FIRST_RUN" -eq 0 ] && [ "$RESET_HOMEPAGE" -eq 0 ]; then
-        log "$rel kept (homepage protected after first install)"
+      if [ "$RESET_HOMEPAGE" -eq 0 ]; then
+        log "$rel kept (use --reset-homepage to replace)"
         return
       fi
-    elif [ "$FIRST_RUN" -eq 0 ] && [ "$FORCE" -eq 0 ]; then
+    elif [ "$FORCE" -eq 0 ]; then
       log "$rel kept (customized; --force refreshes scaffold files)"
       return
     fi
@@ -245,75 +238,82 @@ install_file() {
   fi
   mkdir -p "$(dirname "$dest")"
   cp "$src" "$dest"
+  case "$rel" in
+    deploy.sh|tools/*.sh) chmod +x "$dest" ;;
+  esac
   log "Installed $rel"
 }
 
-install_claude_settings() {
-  local src="$SCAFFOLD_DIR/.claude/settings.json" rel='.claude/settings.json' dest="$TARGET_DIR/.claude/settings.json"
-  if [ ! -f "$dest" ]; then
-    install_file "$src" "$rel" once
-    return
-  fi
-  # Merge only the template's permissions.deny and hooks additions. Preserve
-  # every user-specific setting and allow/ask permission in the destination.
-  local tmp
-  tmp="$(mktemp)"
-  if ! SETTINGS_SOURCE="$src" SETTINGS_DEST="$dest" php > "$tmp" <<'PHP'
-<?php
-try {
-    $source = json_decode(file_get_contents(getenv('SETTINGS_SOURCE')), true, 512, JSON_THROW_ON_ERROR);
-    $target = json_decode(file_get_contents(getenv('SETTINGS_DEST')), true, 512, JSON_THROW_ON_ERROR);
-    if (!is_array($source) || !is_array($target)) throw new RuntimeException('Root must be an object');
-    $original = $target;
-    if (isset($source['permissions']['deny'])) {
-        if (!is_array($source['permissions']['deny']) || array_keys($source['permissions']['deny']) !== array_keys(array_values($source['permissions']['deny']))) throw new RuntimeException('Template permissions.deny must be an array');
-        if (isset($target['permissions']['deny']) && !is_array($target['permissions']['deny'])) throw new RuntimeException('Existing permissions.deny must be an array');
-        $target['permissions'] ??= [];
-        $target['permissions']['deny'] ??= [];
-        foreach ($source['permissions']['deny'] as $rule) {
-            if (!in_array($rule, $target['permissions']['deny'], true)) $target['permissions']['deny'][] = $rule;
+prepare_claude_settings() {
+  MERGED_SETTINGS="$(php -r '
+    try {
+      $files = array_slice($argv, 1);
+      $settings = [];
+      foreach ($files as $file) {
+        $data = is_file($file)
+          ? json_decode(file_get_contents($file), false, 512, JSON_THROW_ON_ERROR)
+          : new stdClass();
+        if (!is_object($data)) throw new RuntimeException("Settings root must be an object");
+        foreach (["permissions", "hooks"] as $key) {
+          if (property_exists($data, $key) && !is_object($data->$key)) {
+            throw new RuntimeException("{$key} must be an object");
+          }
         }
-    }
-    foreach (($source['hooks'] ?? []) as $event => $entries) {
-        if (!is_array($entries)) throw new RuntimeException('Template hooks must be arrays');
-        if (isset($target['hooks'][$event]) && !is_array($target['hooks'][$event])) throw new RuntimeException('Existing hook entries must be arrays');
-        $target['hooks'] ??= [];
-        $target['hooks'][$event] ??= [];
+        foreach (["allow", "ask", "deny"] as $key) {
+          if (isset($data->permissions) && property_exists($data->permissions, $key)) {
+            if (!is_array($data->permissions->$key)) throw new RuntimeException("permissions.{$key} must be an array");
+            foreach ($data->permissions->$key as $rule) {
+              if (!is_string($rule)) throw new RuntimeException("Permission rules must be strings");
+            }
+          }
+        }
+        foreach (($data->hooks ?? new stdClass()) as $event => $entries) {
+          if (!is_array($entries)) throw new RuntimeException("hooks.{$event} must be an array");
+        }
+        $settings[] = $data;
+      }
+      [$source, $target] = $settings;
+      $target->permissions ??= new stdClass();
+      $target->permissions->deny ??= [];
+      foreach (($source->permissions->deny ?? []) as $rule) {
+        if (!in_array($rule, $target->permissions->deny, true)) $target->permissions->deny[] = $rule;
+      }
+      $target->hooks ??= new stdClass();
+      foreach (($source->hooks ?? new stdClass()) as $event => $entries) {
+        $target->hooks->$event ??= [];
         foreach ($entries as $entry) {
-            if (!in_array($entry, $target['hooks'][$event], true)) $target['hooks'][$event][] = $entry;
+          if (!in_array($entry, $target->hooks->$event)) $target->hooks->{$event}[] = $entry;
         }
+      }
+      $encoded = json_encode($target, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+      if (is_file($files[1])) {
+        $original = file_get_contents($files[1]);
+        if (json_decode($original) == $target) $encoded = $original;
+      }
+      echo $encoded;
+    } catch (Throwable $e) {
+      fwrite(STDERR, "Claude settings validation/merge failed: " . $e->getMessage() . "\n");
+      exit(1);
     }
-    if ($target === $original) {
-        echo file_get_contents(getenv('SETTINGS_DEST'));
-    } else {
-        echo json_encode($target, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
-    }
-} catch (Throwable $e) {
-    fwrite(STDERR, 'Claude settings merge failed: ' . $e->getMessage() . "\n");
-    exit(1);
+  ' "$SCAFFOLD_DIR/.claude/settings.json" "$TARGET_DIR/.claude/settings.json")" || fail "Settings validation failed."
 }
-PHP
-  then
-    rm -f "$tmp"
-    fail "Claude settings merge could not be completed."
-  fi
-  if cmp -s "$tmp" "$dest"; then
+
+install_claude_settings() {
+  local rel='.claude/settings.json' dest="$TARGET_DIR/.claude/settings.json" staged
+  if [ ! -f "$dest" ]; then
+    install_file "$SCAFFOLD_DIR/.claude/settings.json" "$rel" once
+  elif [ "$(cat "$dest")" = "$MERGED_SETTINGS" ]; then
     log "$rel already includes required hooks and deny rules"
   elif [ "$DRY_RUN" -eq 1 ]; then
     log "[dry-run] Would merge scaffold hooks/deny rules into $rel"
   else
     backup_file "$rel"
-    chmod 600 "$tmp"
-    # Destination is already verified as non-symlink. A same-dir atomic move
-    # avoids leaving a truncated settings file if installation is interrupted.
-    local staged
     staged="$(mktemp "$TARGET_DIR/.claude/.settings.XXXXXX")"
-    cp "$tmp" "$staged"
+    printf '%s\n' "$MERGED_SETTINGS" > "$staged"
     chmod 600 "$staged"
     mv -f "$staged" "$dest"
     log "Merged required Claude hooks and deny rules into $rel"
   fi
-  rm -f "$tmp"
 }
 
 update_gitignore() {
@@ -389,7 +389,7 @@ read_state
 
 printf '\n========================================\nTrongate Scaffold Installer v2%s\n========================================\n' "$([ "$DRY_RUN" -eq 1 ] && printf ' (dry-run)' || true)"
 if [ "$FIRST_RUN" -eq 1 ]; then
-  log 'Mode: first installation (under-construction homepage will be installed)'
+  log 'Mode: first installation (existing files preserved)'
 else
   log 'Mode: rerun (homepage will be preserved unless --reset-homepage)'
 fi
@@ -422,11 +422,6 @@ install_file "$SCAFFOLD_DIR/project-files/phpstan.neon" 'phpstan.neon'
 install_file "$SCAFFOLD_DIR/project-files/tools/phpstan-bootstrap.php" 'tools/phpstan-bootstrap.php'
 install_file "$SCAFFOLD_DIR/project-files/tools/install-phpstan.sh" 'tools/install-phpstan.sh'
 install_file "$SCAFFOLD_DIR/project-files/tools/phpstan.sh" 'tools/phpstan.sh'
-if [ "$DRY_RUN" -eq 1 ]; then
-  log '[dry-run] Would set tools/install-phpstan.sh and tools/phpstan.sh executable'
-else
-  chmod +x "$TARGET_DIR/tools/install-phpstan.sh" "$TARGET_DIR/tools/phpstan.sh"
-fi
 install_file "$SCAFFOLD_DIR/project-files/public/css/app.css" 'public/css/app.css'
 install_file "$SCAFFOLD_DIR/project-files/modules/templates/views/public.php" 'modules/templates/views/public.php' homepage
 install_file "$SCAFFOLD_DIR/project-files/modules/welcome/Welcome.php" 'modules/welcome/Welcome.php' homepage
@@ -438,11 +433,6 @@ echo 'Installing project-local deployment helpers...'
 install_file "$SCAFFOLD_DIR/project-files/deploy.sh" 'deploy.sh' force-only
 install_file "$SCAFFOLD_DIR/project-files/.deploy.env" '.deploy.env' once
 secure_deploy_env
-if [ "$DRY_RUN" -eq 1 ]; then
-  log '[dry-run] Would make deploy.sh executable'
-else
-  chmod +x "$TARGET_DIR/deploy.sh"
-fi
 if [ -f "$TARGET_DIR/deploy.sh" ] && ! grep -qF '# TRONGATE_DEPLOY_V2' "$TARGET_DIR/deploy.sh"; then
   warn 'Existing project-local deploy.sh is not v2; review it before use (or replace manually).'
 fi
