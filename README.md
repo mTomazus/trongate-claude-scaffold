@@ -227,19 +227,32 @@ php tests/run.php          # must exit 0 before the work counts as done
 
 ## Verification Gates
 
-Run the scaffold's offline regression checks from this repository:
+Claude Code and Codex use the same verification command in this repository:
 
 ```bash
-php tests/installer_test.php   # disposable projects; stubbed rsync, no deployment
-php tests/php_guard_test.php   # convention guard regression tests
-bash -n trongate-init.sh
-bash -n project-files/deploy.sh
+bash tools/check-scaffold.sh
+# Also check whitespace in committed changes since a base revision:
+bash tools/check-scaffold.sh BASE_REVISION
 ```
 
-These tests are not copied into installed projects. They require PHP CLI and Bash;
-no server or downloaded tooling is needed. Installer coverage includes first runs,
+The command checks active PHP/Bash syntax, staged and unstaged whitespace, and
+runs `php tests/installer_test.php` and `php tests/php_guard_test.php`. It exits
+nonzero on the first failed check. It works from any working directory when you
+give the path to the script. Tests use disposable projects and stubbed rsync.
+
+This runner and its tests are not copied into installed projects. They require
+Git, PHP CLI 8.0+ and Bash; no server or downloaded tooling is needed. Installer coverage includes first runs,
 reruns, force/reset, legacy and interrupted state, settings validation/merging,
 read-only dry-run, symlink rejection, backups and deployment arguments.
+
+`.github/workflows/scaffold.yml` runs this same command on pushes and pull
+requests, using Linux and macOS runners with PHP 8.3. CI checks whitespace over
+the pushed or proposed commit range as well as running the suites. For a new
+branch with no previous tip, it checks the tip commit's whitespace; opening a
+pull request checks the full proposed range. Actions are
+pinned to commit hashes, checkout credentials are not retained, and repository
+permissions are read-only. CI prepares the runtime before the offline checks;
+it has no deployment step or deployment credentials.
 
 The installed scaffold ships two gates so that "it works" is something you can check rather than something Claude asserts.
 
