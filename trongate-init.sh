@@ -1,259 +1,466 @@
-#!/bin/bash
-# Usage: bash trongate-init.sh [--force]
-# Run from the root of a new Trongate project
-# Sets up the Claude scaffold, project files and verification gates
-#
-# Safe to re-run: once a project has been initialised, any file you have
-# changed is kept. --force replaces those with the scaffold's version.
+#!/usr/bin/env bash
+# Trongate Scaffold Installer v2
+# Usage: bash trongate-init-v2.sh [--dry-run] [--force] [--reset-homepage] [--skip-docs]
+# Run FROM a Trongate v2 project root. Place this script in the scaffold source.
+# First installation replaces the Welcome controller/homepage and public template.
+# Subsequent installations preserve those 3 files, even with --force.
+# The opt-in --reset-homepage flag replaces them again (with backups).
 
-set -e
+set -euo pipefail
 
-SCAFFOLD_DIR="$(cd "$(dirname "$0")" && pwd)"
-TARGET_DIR="$(pwd)"
-
+SCAFFOLD_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+TARGET_DIR="$(pwd -P)"
+STATE_FILE="$TARGET_DIR/.trongate-init-state"
+LEGACY_MARKER="$TARGET_DIR/_reference/trongate-memory.md"
+DRY_RUN=0
 FORCE=0
-if [ "${1:-}" = "--force" ]; then
-  FORCE=1
-elif [ -n "${1:-}" ]; then
-  echo "Unknown argument '$1'. Usage: trongate-init [--force]" >&2
-  exit 1
-fi
-
-# Everything below writes into the current folder, and deploy files into the
-# one above it. Refuse to do that anywhere but a Trongate project root.
-if [ ! -d "$TARGET_DIR/engine" ] || [ ! -d "$TARGET_DIR/modules" ]; then
-  echo "ERROR: $TARGET_DIR is not a Trongate project root (no engine/ and modules/)." >&2
-  echo "       cd into your Trongate project, then run this again." >&2
-  exit 1
-fi
-
-# A project that already has the memory file has been initialised before.
-# On a first run the stock Trongate files are replaced; after that, edits win.
-FIRST_RUN=1
-if [ -f "$TARGET_DIR/_reference/trongate-memory.md" ]; then
-  FIRST_RUN=0
-fi
-
-# Every file that gets replaced is copied here first, so a first run on a
-# project you have already worked on never loses your changes.
-BACKUP_DIR="$TARGET_DIR/.trongate-init-backup/$(date +%Y%m%d-%H%M%S)"
+RESET_HOMEPAGE=0
+SKIP_DOCS=0
+FIRST_RUN=0
 BACKED_UP=0
+BACKUP_DIR=""
 
-# install_file <path relative to scaffold source> <path relative to project> [once]
-#   - identical file already there: nothing to do
-#   - "once": never replace an existing file (unless --force)
-#   - otherwise replace on a first run, keep the user's version on a re-run
-#   - an existing file is backed up to $BACKUP_DIR before it is replaced
-install_file() {
-  local src="$1" rel="$2" once="${3:-}"
-  local dest="$TARGET_DIR/$rel"
+usage() {
+  cat <<'EOF'
+Usage: bash trongate-init-v2.sh [options]
 
-  if [ -f "$dest" ]; then
-    if cmp -s "$src" "$dest"; then
-      echo "  $rel is up to date"
-      return
-    fi
-    if [ "$FORCE" -eq 0 ] && { [ -n "$once" ] || [ "$FIRST_RUN" -eq 0 ]; }; then
-      echo "  $rel differs from the scaffold - kept yours (--force replaces it)"
-      return
-    fi
-    mkdir -p "$(dirname "$BACKUP_DIR/$rel")"
-    cp -p "$dest" "$BACKUP_DIR/$rel"
-    BACKED_UP=$((BACKED_UP + 1))
-    echo "  Backed up $rel"
-  fi
-
-  mkdir -p "$(dirname "$dest")"
-  cp "$src" "$dest"
-  echo "  Wrote $rel"
+  --dry-run         Preview actions; do not modify any files or fetch docs
+  --force           Refresh scaffold-managed files (back up replacements);
+                    never replace custom homepage files on a rerun
+  --reset-homepage  Explicitly replace Welcome.php, default_homepage.php and
+                    modules/templates/views/public.php (backed up first)
+  --skip-docs       Skip cloning/updating reference documentation
+  -h, --help        Show this help
+EOF
 }
 
-echo "========================================"
-echo "Trongate Claude Scaffold"
-echo "========================================"
-echo ""
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+warn() { printf '  WARNING: %s\n' "$*" >&2; }
+log() { printf '  %s\n' "$*"; }
 
-# ============================================
-# PART 1: Claude scaffold files
-# ============================================
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    --force) FORCE=1 ;;
+    --reset-homepage) RESET_HOMEPAGE=1 ;;
+    --skip-docs) SKIP_DOCS=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "Unknown argument: $arg (see --help)" ;;
+  esac
+done
 
-echo "Installing Claude scaffold files..."
+# Reject symlinks and non-files before reading/writing an installer-managed path.
+check_dest() {
+  local dest="$TARGET_DIR/$1" parent="$TARGET_DIR" segment
+  local -a segments=()
+  IFS='/' read -r -a segments <<< "$1"
+  for segment in "${segments[@]:0:${#segments[@]}-1}"; do
+    parent="$parent/$segment"
+    [ ! -L "$parent" ] || fail "Refusing symlinked parent directory: $parent"
+  done
+  [ ! -L "$dest" ] || fail "Refusing symlink destination: $1"
+  [ ! -e "$dest" ] || [ -f "$dest" ] || fail "Expected a regular file: $1"
+}
 
-# AGENTS.md is the manual (read by Codex and other agents); CLAUDE.md just
-# imports it, because Claude Code only reads CLAUDE.md.
-install_file "$SCAFFOLD_DIR/AGENTS.md" "AGENTS.md" once
-install_file "$SCAFFOLD_DIR/CLAUDE.md" "CLAUDE.md" once
-if ! grep -qxF '@AGENTS.md' "$TARGET_DIR/CLAUDE.md"; then
-  echo "  NOTE: your CLAUDE.md does not import AGENTS.md, so Claude Code and other agents"
-  echo "        read different manuals. Move anything you added into AGENTS.md, then make"
-  echo "        CLAUDE.md contain just the line:  @AGENTS.md"
+require_source() {
+  [ -f "$SCAFFOLD_DIR/$1" ] || fail "Missing scaffold source file: $1"
+}
+
+# All validation is done BEFORE the installer makes any change.
+preflight() {
+  [ -d "$TARGET_DIR/engine" ] && [ -d "$TARGET_DIR/modules" ] ||
+    fail "Run this inside a Trongate project root (engine/ and modules/ required)."
+  [ -d "$TARGET_DIR/modules/welcome/views" ] ||
+    fail "Expected Trongate v2 modules/welcome/views/; refusing an unknown layout."
+  [ -d "$TARGET_DIR/modules/templates/views" ] ||
+    fail "Expected modules/templates/views/; refusing an unknown layout."
+  command -v php >/dev/null 2>&1 || fail "PHP CLI is required to validate and merge Claude settings."
+  for cmd in cmp cp mkdir mktemp sed grep chmod mv; do
+    command -v "$cmd" >/dev/null 2>&1 || fail "Missing required command: $cmd"
+  done
+  [ -w "$TARGET_DIR" ] || fail "Project root is not writable: $TARGET_DIR"
+  [ "$TARGET_DIR" != "$SCAFFOLD_DIR" ] || fail "Run from the Trongate project, not the scaffold source directory."
+
+  local rel
+  for rel in \
+    AGENTS.md CLAUDE.md \
+    _reference/trongate-memory.md _reference/gauntlet.md \
+    _reference/specs/SPEC_TEMPLATE.md _reference/plans/PLAN_TEMPLATE.md \
+    .claude/commands/new-spec.md .claude/commands/new-plan.md \
+    .claude/commands/commit.md .claude/commands/security-audit.md \
+    .claude/commands/update-docs.md \
+    .claude/agents/specifier.md .claude/agents/verifier.md \
+    .claude/hooks/php_guard.php .claude/settings.json \
+    project-files/tests/run.php project-files/tests/welcome_test.php \
+    project-files/phpstan.neon \
+    project-files/tools/phpstan-bootstrap.php \
+    project-files/tools/install-phpstan.sh project-files/tools/phpstan.sh \
+    project-files/public/css/app.css \
+    project-files/modules/templates/views/public.php \
+    project-files/modules/welcome/Welcome.php \
+    project-files/modules/welcome/views/default_homepage.php \
+    project-files/modules/welcome/views/components_showcase.php \
+    project-files/deploy.sh project-files/.deploy.env; do
+    require_source "$rel"
+  done
+
+  for rel in \
+    AGENTS.md CLAUDE.md _reference/trongate-memory.md _reference/gauntlet.md \
+    _reference/specs/SPEC_TEMPLATE.md _reference/plans/PLAN_TEMPLATE.md \
+    .claude/commands/new-spec.md .claude/commands/new-plan.md \
+    .claude/commands/commit.md .claude/commands/security-audit.md \
+    .claude/commands/update-docs.md \
+    .claude/agents/specifier.md .claude/agents/verifier.md \
+    .claude/hooks/php_guard.php .claude/settings.json \
+    tests/run.php tests/welcome_test.php phpstan.neon \
+    tools/phpstan-bootstrap.php tools/install-phpstan.sh tools/phpstan.sh \
+    public/css/app.css \
+    modules/templates/views/public.php modules/welcome/Welcome.php \
+    modules/welcome/views/default_homepage.php \
+    modules/welcome/views/components_showcase.php \
+    deploy.sh .deploy.env .gitignore .trongate-init-state; do
+    check_dest "$rel"
+  done
+
+  # Validate JSON syntax and root types before planning any writes.
+  php -r '
+    foreach (array_slice($argv, 1) as $file) {
+      if (!is_file($file)) continue;
+      try {
+        $data = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_object(json_decode(file_get_contents($file), false, 512, JSON_THROW_ON_ERROR))) throw new Exception("Expected JSON object");
+      } catch (Throwable $e) {
+        fwrite(STDERR, "Invalid Claude settings JSON in {$file}: {$e->getMessage()}\n");
+        exit(1);
+      }
+    }
+  ' "$SCAFFOLD_DIR/.claude/settings.json" "$TARGET_DIR/.claude/settings.json" || fail "Settings validation failed."
+
+  grep -qF '# TRONGATE_DEPLOY_V2' "$SCAFFOLD_DIR/project-files/deploy.sh" ||
+    fail "Your project-files/deploy.sh is the old parent-directory version. Replace it with the bundled v2 deploy template first."
+  if [ -f "$STATE_FILE" ]; then
+    grep -q '^trongate-init-v2:' "$STATE_FILE" ||
+      fail "Unrecognized init state format; inspect .trongate-init-state before proceeding."
+  fi
+}
+
+# Compatibility: a project created with v1 already contains the reference
+# memory. Never reset its homepage merely because it lacks v2's state file.
+read_state() {
+  if [ -f "$STATE_FILE" ]; then
+    case "$(head -n 1 "$STATE_FILE")" in
+      'trongate-init-v2:complete') FIRST_RUN=0 ;;
+      'trongate-init-v2:installing:new') FIRST_RUN=1 ;;
+      'trongate-init-v2:installing:existing') FIRST_RUN=0 ;;
+      *) fail "Unknown init state in $STATE_FILE" ;;
+    esac
+  elif [ -f "$LEGACY_MARKER" ]; then
+    FIRST_RUN=0
+    log "Detected v1 initialization; preserving existing homepage files."
+  else
+    FIRST_RUN=1
+  fi
+}
+
+begin_state() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] Would record installation state"
+    return
+  fi
+  local phase=existing
+  [ "$FIRST_RUN" -eq 0 ] || phase=new
+  # The in-progress state is recorded before copying _reference memory,
+  # so an interrupted first run is not mistaken for a completed v1 install.
+  local tmp
+  tmp="$(mktemp "$TARGET_DIR/.trongate-init-state.XXXXXX")"
+  printf 'trongate-init-v2:installing:%s\n' "$phase" > "$tmp"
+  mv -f "$tmp" "$STATE_FILE"
+}
+
+finish_state() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] Would mark initialization complete"
+    return
+  fi
+  local tmp
+  tmp="$(mktemp "$TARGET_DIR/.trongate-init-state.XXXXXX")"
+  printf 'trongate-init-v2:complete\n' > "$tmp"
+  mv -f "$tmp" "$STATE_FILE"
+}
+
+ensure_backup_dir() {
+  if [ -z "$BACKUP_DIR" ]; then
+    mkdir -p "$TARGET_DIR/.trongate-init-backup"
+    BACKUP_DIR="$(mktemp -d "$TARGET_DIR/.trongate-init-backup/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
+    chmod 700 "$BACKUP_DIR"
+  fi
+}
+
+backup_file() {
+  local rel="$1"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] Would back up $rel before replacement"
+    return
+  fi
+  ensure_backup_dir
+  mkdir -p "$(dirname "$BACKUP_DIR/$rel")"
+  cp -p "$TARGET_DIR/$rel" "$BACKUP_DIR/$rel"
+  BACKED_UP=$((BACKED_UP + 1))
+}
+
+# Policies: managed (initial or --force), once (first creation only),
+# force-only (create if missing, or refresh only with --force),
+# homepage (first run only, even --force; --reset-homepage is explicit).
+install_file() {
+  local src="$1" rel="$2" policy="${3:-managed}"
+  local dest="$TARGET_DIR/$rel"
+  check_dest "$rel"
+  if [ -f "$dest" ]; then
+    if cmp -s "$src" "$dest"; then
+      log "$rel up to date"
+      return
+    fi
+    if [ "$policy" = once ]; then
+      log "$rel kept (user-owned; never overwritten by init)"
+      return
+    fi
+    if [ "$policy" = force-only ] && [ "$FORCE" -eq 0 ]; then
+      log "$rel kept (use --force to update the deploy helper)"
+      return
+    fi
+    if [ "$policy" = homepage ]; then
+      if [ "$FIRST_RUN" -eq 0 ] && [ "$RESET_HOMEPAGE" -eq 0 ]; then
+        log "$rel kept (homepage protected after first install)"
+        return
+      fi
+    elif [ "$FIRST_RUN" -eq 0 ] && [ "$FORCE" -eq 0 ]; then
+      log "$rel kept (customized; --force refreshes scaffold files)"
+      return
+    fi
+    backup_file "$rel"
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] Would install $rel"
+    return
+  fi
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest"
+  log "Installed $rel"
+}
+
+install_claude_settings() {
+  local src="$SCAFFOLD_DIR/.claude/settings.json" rel='.claude/settings.json' dest="$TARGET_DIR/.claude/settings.json"
+  if [ ! -f "$dest" ]; then
+    install_file "$src" "$rel" once
+    return
+  fi
+  # Merge only the template's permissions.deny and hooks additions. Preserve
+  # every user-specific setting and allow/ask permission in the destination.
+  local tmp
+  tmp="$(mktemp)"
+  if ! SETTINGS_SOURCE="$src" SETTINGS_DEST="$dest" php > "$tmp" <<'PHP'
+<?php
+try {
+    $source = json_decode(file_get_contents(getenv('SETTINGS_SOURCE')), true, 512, JSON_THROW_ON_ERROR);
+    $target = json_decode(file_get_contents(getenv('SETTINGS_DEST')), true, 512, JSON_THROW_ON_ERROR);
+    if (!is_array($source) || !is_array($target)) throw new RuntimeException('Root must be an object');
+    $original = $target;
+    if (isset($source['permissions']['deny'])) {
+        if (!is_array($source['permissions']['deny']) || array_keys($source['permissions']['deny']) !== array_keys(array_values($source['permissions']['deny']))) throw new RuntimeException('Template permissions.deny must be an array');
+        if (isset($target['permissions']['deny']) && !is_array($target['permissions']['deny'])) throw new RuntimeException('Existing permissions.deny must be an array');
+        $target['permissions'] ??= [];
+        $target['permissions']['deny'] ??= [];
+        foreach ($source['permissions']['deny'] as $rule) {
+            if (!in_array($rule, $target['permissions']['deny'], true)) $target['permissions']['deny'][] = $rule;
+        }
+    }
+    foreach (($source['hooks'] ?? []) as $event => $entries) {
+        if (!is_array($entries)) throw new RuntimeException('Template hooks must be arrays');
+        if (isset($target['hooks'][$event]) && !is_array($target['hooks'][$event])) throw new RuntimeException('Existing hook entries must be arrays');
+        $target['hooks'] ??= [];
+        $target['hooks'][$event] ??= [];
+        foreach ($entries as $entry) {
+            if (!in_array($entry, $target['hooks'][$event], true)) $target['hooks'][$event][] = $entry;
+        }
+    }
+    if ($target === $original) {
+        echo file_get_contents(getenv('SETTINGS_DEST'));
+    } else {
+        echo json_encode($target, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
+    }
+} catch (Throwable $e) {
+    fwrite(STDERR, 'Claude settings merge failed: ' . $e->getMessage() . "\n");
+    exit(1);
+}
+PHP
+  then
+    rm -f "$tmp"
+    fail "Claude settings merge could not be completed."
+  fi
+  if cmp -s "$tmp" "$dest"; then
+    log "$rel already includes required hooks and deny rules"
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] Would merge scaffold hooks/deny rules into $rel"
+  else
+    backup_file "$rel"
+    chmod 600 "$tmp"
+    # Destination is already verified as non-symlink. A same-dir atomic move
+    # avoids leaving a truncated settings file if installation is interrupted.
+    local staged
+    staged="$(mktemp "$TARGET_DIR/.claude/.settings.XXXXXX")"
+    cp "$tmp" "$staged"
+    chmod 600 "$staged"
+    mv -f "$staged" "$dest"
+    log "Merged required Claude hooks and deny rules into $rel"
+  fi
+  rm -f "$tmp"
+}
+
+update_gitignore() {
+  local dest="$TARGET_DIR/.gitignore" pattern changes=() 
+  local patterns=("_reference/trongate-docs-repo/" "tools/*.phar" ".DS_Store" ".trongate-init-backup/" ".deploy.env" "config/*.local.php" "config_*/**/*.local.php")
+  for pattern in "${patterns[@]}"; do
+    if [ ! -f "$dest" ] || ! grep -qxF "$pattern" "$dest"; then
+      changes+=("$pattern")
+    fi
+  done
+  if [ "${#changes[@]}" -eq 0 ]; then
+    log ".gitignore includes preferred defaults"
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] Would add ${#changes[@]} ignore entries to .gitignore"
+  else
+    # Appends only, existing patterns are retained as requested.
+    if [ -f "$dest" ]; then backup_file '.gitignore'; fi
+    { printf '\n# Added by trongate-init v2\n'; printf '%s\n' "${changes[@]}"; } >> "$dest"
+    log "Updated .gitignore (existing entries preserved)"
+  fi
+  if [ -f "$dest" ] && grep -qxF 'config/' "$dest"; then
+    warn "Your preexisting .gitignore excludes config/ entirely; ensure new clones receive safe config examples."
+  fi
+  if command -v git >/dev/null 2>&1 && git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git -C "$TARGET_DIR" ls-files --error-unmatch .deploy.env >/dev/null 2>&1; then
+      warn ".deploy.env is already tracked by Git! Untrack it separately and rotate any exposed credentials."
+    fi
+  fi
+}
+
+secure_deploy_env() {
+  local dest="$TARGET_DIR/.deploy.env"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] Would restrict .deploy.env to owner-only permissions (600)"
+  else
+    chmod 600 "$dest"
+    log "Set .deploy.env permissions to 600"
+  fi
+  # Legacy v1 environment variables cannot be mapped without seeing the old
+  # server-specific template. Preserve and warn instead of guessing.
+  if [ -f "$dest" ] && ! grep -q '^DEPLOY_REMOTE_PATH=' "$dest"; then
+    warn ".deploy.env is not in v2 format (needs DEPLOY_HOST, DEPLOY_USER and DEPLOY_REMOTE_PATH). Review it before deployment."
+  fi
+}
+
+update_docs() {
+  [ "$SKIP_DOCS" -eq 0 ] || { log "Reference docs skipped (--skip-docs)"; return; }
+  local docs="$TARGET_DIR/_reference/trongate-docs-repo"
+  if [ -L "$docs" ]; then
+    warn "Docs directory is a symlink; refusing to update it"
+    return
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[dry-run] Would clone/update reference docs"
+    return
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    warn "git is unavailable; reference docs not updated"
+  elif [ -d "$docs/.git" ]; then
+    if git -C "$docs" pull --ff-only; then log "Trongate docs updated";
+    else warn "Could not update docs; run /update-docs later"; fi
+  elif [ -e "$docs" ]; then
+    warn "$docs exists but is not a Git checkout; docs untouched"
+  elif git clone --depth=1 https://github.com/trongate/trongate-docs.git "$docs"; then
+    log "Trongate docs cloned"
+  else
+    warn "Could not clone docs; run /update-docs later"
+  fi
+}
+
+preflight
+read_state
+
+printf '\n========================================\nTrongate Scaffold Installer v2%s\n========================================\n' "$([ "$DRY_RUN" -eq 1 ] && printf ' (dry-run)' || true)"
+if [ "$FIRST_RUN" -eq 1 ]; then
+  log 'Mode: first installation (under-construction homepage will be installed)'
+else
+  log 'Mode: rerun (homepage will be preserved unless --reset-homepage)'
 fi
+begin_state
 
-install_file "$SCAFFOLD_DIR/_reference/trongate-memory.md" "_reference/trongate-memory.md"
-install_file "$SCAFFOLD_DIR/_reference/gauntlet.md" "_reference/gauntlet.md"
-install_file "$SCAFFOLD_DIR/_reference/specs/SPEC_TEMPLATE.md" "_reference/specs/SPEC_TEMPLATE.md"
-install_file "$SCAFFOLD_DIR/_reference/plans/PLAN_TEMPLATE.md" "_reference/plans/PLAN_TEMPLATE.md"
-
+echo ''
+echo 'Installing AI instructions and reference files...'
+install_file "$SCAFFOLD_DIR/AGENTS.md" 'AGENTS.md' once
+install_file "$SCAFFOLD_DIR/CLAUDE.md" 'CLAUDE.md' once
+if [ -f "$TARGET_DIR/CLAUDE.md" ] && ! grep -qxF '@AGENTS.md' "$TARGET_DIR/CLAUDE.md"; then
+  warn 'CLAUDE.md does not contain an exact @AGENTS.md import; review AI instruction consistency.'
+fi
+install_file "$SCAFFOLD_DIR/_reference/trongate-memory.md" '_reference/trongate-memory.md'
+install_file "$SCAFFOLD_DIR/_reference/gauntlet.md" '_reference/gauntlet.md'
+install_file "$SCAFFOLD_DIR/_reference/specs/SPEC_TEMPLATE.md" '_reference/specs/SPEC_TEMPLATE.md'
+install_file "$SCAFFOLD_DIR/_reference/plans/PLAN_TEMPLATE.md" '_reference/plans/PLAN_TEMPLATE.md'
 for cmd in new-spec new-plan commit security-audit update-docs; do
   install_file "$SCAFFOLD_DIR/.claude/commands/$cmd.md" ".claude/commands/$cmd.md"
 done
+install_file "$SCAFFOLD_DIR/.claude/agents/specifier.md" '.claude/agents/specifier.md'
+install_file "$SCAFFOLD_DIR/.claude/agents/verifier.md" '.claude/agents/verifier.md'
+install_file "$SCAFFOLD_DIR/.claude/hooks/php_guard.php" '.claude/hooks/php_guard.php'
+install_claude_settings
+install_file "$SCAFFOLD_DIR/project-files/tests/run.php" 'tests/run.php'
+install_file "$SCAFFOLD_DIR/project-files/tests/welcome_test.php" 'tests/welcome_test.php' once
 
-# Gauntlet agents (specifier + verifier)
-install_file "$SCAFFOLD_DIR/.claude/agents/specifier.md" ".claude/agents/specifier.md"
-install_file "$SCAFFOLD_DIR/.claude/agents/verifier.md" ".claude/agents/verifier.md"
-
-# Verification gates: the guard hook plus the zero-dependency test harness
-install_file "$SCAFFOLD_DIR/.claude/hooks/php_guard.php" ".claude/hooks/php_guard.php"
-
-# settings.json may already carry the user's own permissions - never clobber it
-if [ -f "$TARGET_DIR/.claude/settings.json" ]; then
-  if ! cmp -s "$SCAFFOLD_DIR/.claude/settings.json" "$TARGET_DIR/.claude/settings.json"; then
-    echo "  .claude/settings.json already exists. Kept yours - merge the php_guard hook and deny rules by hand if you want them."
-  fi
+echo ''
+echo 'Installing project tooling and UI...'
+install_file "$SCAFFOLD_DIR/project-files/phpstan.neon" 'phpstan.neon'
+install_file "$SCAFFOLD_DIR/project-files/tools/phpstan-bootstrap.php" 'tools/phpstan-bootstrap.php'
+install_file "$SCAFFOLD_DIR/project-files/tools/install-phpstan.sh" 'tools/install-phpstan.sh'
+install_file "$SCAFFOLD_DIR/project-files/tools/phpstan.sh" 'tools/phpstan.sh'
+if [ "$DRY_RUN" -eq 1 ]; then
+  log '[dry-run] Would set tools/install-phpstan.sh and tools/phpstan.sh executable'
 else
-  install_file "$SCAFFOLD_DIR/.claude/settings.json" ".claude/settings.json"
+  chmod +x "$TARGET_DIR/tools/install-phpstan.sh" "$TARGET_DIR/tools/phpstan.sh"
 fi
+install_file "$SCAFFOLD_DIR/project-files/public/css/app.css" 'public/css/app.css'
+install_file "$SCAFFOLD_DIR/project-files/modules/templates/views/public.php" 'modules/templates/views/public.php' homepage
+install_file "$SCAFFOLD_DIR/project-files/modules/welcome/Welcome.php" 'modules/welcome/Welcome.php' homepage
+install_file "$SCAFFOLD_DIR/project-files/modules/welcome/views/default_homepage.php" 'modules/welcome/views/default_homepage.php' homepage
+install_file "$SCAFFOLD_DIR/project-files/modules/welcome/views/components_showcase.php" 'modules/welcome/views/components_showcase.php'
 
-install_file "$SCAFFOLD_DIR/project-files/tests/run.php" "tests/run.php"
-install_file "$SCAFFOLD_DIR/project-files/tests/welcome_test.php" "tests/welcome_test.php" once
-
-# Add preferred defaults to .gitignore. Existing entries are never discarded.
-touch "$TARGET_DIR/.gitignore"
-gitignore_changed=0
-for pattern in "config/" "config_*/" "_reference/trongate-docs-repo/" "tools/*.phar" ".DS_Store" ".trongate-init-backup/"; do
-  if ! grep -qxF "$pattern" "$TARGET_DIR/.gitignore"; then
-    if [ "$gitignore_changed" -eq 0 ]; then
-      printf '\n# Added by trongate-init\n' >> "$TARGET_DIR/.gitignore"
-      gitignore_changed=1
-    fi
-    echo "$pattern" >> "$TARGET_DIR/.gitignore"
-  fi
-done
-if [ "$gitignore_changed" -eq 1 ]; then
-  echo "  Updated .gitignore (existing entries preserved)"
+echo ''
+echo 'Installing project-local deployment helpers...'
+install_file "$SCAFFOLD_DIR/project-files/deploy.sh" 'deploy.sh' force-only
+install_file "$SCAFFOLD_DIR/project-files/.deploy.env" '.deploy.env' once
+secure_deploy_env
+if [ "$DRY_RUN" -eq 1 ]; then
+  log '[dry-run] Would make deploy.sh executable'
 else
-  echo "  .gitignore already carries the preferred defaults"
+  chmod +x "$TARGET_DIR/deploy.sh"
 fi
+if [ -f "$TARGET_DIR/deploy.sh" ] && ! grep -qF '# TRONGATE_DEPLOY_V2' "$TARGET_DIR/deploy.sh"; then
+  warn 'Existing project-local deploy.sh is not v2; review it before use (or replace manually).'
+fi
+update_gitignore
 
-# Fetch latest Trongate docs. A network failure here should not abort the
-# rest of the install, so it only warns.
-echo ""
-echo "Fetching latest Trongate docs..."
-if [ -d "$TARGET_DIR/_reference/trongate-docs-repo" ]; then
-  if (cd "$TARGET_DIR/_reference/trongate-docs-repo" && git pull); then
-    echo "  Trongate docs updated."
-  else
-    echo "  WARNING: could not update the docs. Run /update-docs later."
-  fi
+echo ''
+echo 'Updating reference documentation...'
+update_docs
+finish_state
+
+printf '\n========================================\n'
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo 'Dry-run complete: no project files changed.'
 else
-  if git clone --depth=1 https://github.com/trongate/trongate-docs.git "$TARGET_DIR/_reference/trongate-docs-repo"; then
-    echo "  Trongate docs cloned."
-  else
-    echo "  WARNING: could not clone the docs. Run /update-docs later."
-  fi
+  echo 'Trongate scaffold v2 initialization complete.'
 fi
-
-# ============================================
-# PART 2: Project files
-# ============================================
-# The project-files/ folder in this scaffold mirrors the destination
-# structure exactly. We just copy it on top of the project root.
-# Styling is Trongate's own css/trongate.css - no build step required.
-
-echo ""
-echo "Installing project files..."
-
-# Static analysis config. The .phar itself is downloaded on demand by
-# tools/install-phpstan.sh so init stays fast and needs no extra network.
-install_file "$SCAFFOLD_DIR/project-files/phpstan.neon" "phpstan.neon"
-install_file "$SCAFFOLD_DIR/project-files/tools/phpstan-bootstrap.php" "tools/phpstan-bootstrap.php"
-install_file "$SCAFFOLD_DIR/project-files/tools/install-phpstan.sh" "tools/install-phpstan.sh"
-install_file "$SCAFFOLD_DIR/project-files/tools/phpstan.sh" "tools/phpstan.sh"
-chmod +x "$TARGET_DIR/tools/install-phpstan.sh" "$TARGET_DIR/tools/phpstan.sh"
-
-# Component styles that extend Trongate's native css/trongate.css
-install_file "$SCAFFOLD_DIR/project-files/public/css/app.css" "public/css/app.css"
-
-# Replace the public.php template
-if [ -d "$TARGET_DIR/modules/templates/views" ]; then
-  install_file "$SCAFFOLD_DIR/project-files/modules/templates/views/public.php" "modules/templates/views/public.php"
-else
-  echo "  WARNING: modules/templates/views/ not found. Skipping public.php replacement."
-  echo "           Stock Trongate templates already load css/trongate.css."
-fi
-
-# Replace the welcome module: controller + under-construction page + showcase view
-if [ -d "$TARGET_DIR/modules/welcome/views" ]; then
-  # Controller sits directly in the module folder (Trongate v2 - no controllers/ subfolder)
-  install_file "$SCAFFOLD_DIR/project-files/modules/welcome/Welcome.php" "modules/welcome/Welcome.php"
-  install_file "$SCAFFOLD_DIR/project-files/modules/welcome/views/default_homepage.php" "modules/welcome/views/default_homepage.php"
-  install_file "$SCAFFOLD_DIR/project-files/modules/welcome/views/components_showcase.php" "modules/welcome/views/components_showcase.php"
-else
-  echo "  WARNING: modules/welcome/views/ not found. Skipping welcome module replacement."
-fi
-
-# Deploy helper sits one level ABOVE the project root so it is never synced or
-# served. That is outside the directory this script was pointed at, so both
-# files are only ever created, never overwritten - .deploy.env holds real
-# server details.
-PARENT_DIR="$(dirname "$TARGET_DIR")"
-PROJECT_NAME="$(basename "$TARGET_DIR")"
-
-if [ -f "$PARENT_DIR/deploy.sh" ]; then
-  if cmp -s "$SCAFFOLD_DIR/project-files/deploy.sh" "$PARENT_DIR/deploy.sh"; then
-    echo "  ../deploy.sh is up to date"
-  elif ! grep -q 'DEPLOY_SOURCE' "$PARENT_DIR/deploy.sh"; then
-    echo "  WARNING: ../deploy.sh is an old version that syncs the folder it sits in"
-    echo "           (the PARENT of this project) to the server. Do not run it."
-    echo "           Copy any server details into ../.deploy.env, then replace it with:"
-    echo "           cp \"$SCAFFOLD_DIR/project-files/deploy.sh\" \"$PARENT_DIR/deploy.sh\""
-  else
-    echo "  ../deploy.sh already exists. Leaving it alone."
-  fi
-else
-  cp "$SCAFFOLD_DIR/project-files/deploy.sh" "$PARENT_DIR/deploy.sh"
-  chmod +x "$PARENT_DIR/deploy.sh"
-  echo "  Created ../deploy.sh"
-fi
-
-if [ -f "$PARENT_DIR/.deploy.env" ]; then
-  echo "  ../.deploy.env already exists. Leaving it alone."
-  if ! grep -q '^DEPLOY_SOURCE=' "$PARENT_DIR/.deploy.env"; then
-    echo "  WARNING: ../.deploy.env has no DEPLOY_SOURCE line. Add:  DEPLOY_SOURCE=$PROJECT_NAME"
-  fi
-else
-  sed "s/^DEPLOY_SOURCE=.*/DEPLOY_SOURCE=$PROJECT_NAME/" \
-    "$SCAFFOLD_DIR/project-files/.deploy.env" > "$PARENT_DIR/.deploy.env"
-  echo "  Created ../.deploy.env - fill in your server details"
-fi
-
-# ============================================
-# DONE
-# ============================================
-
-echo ""
-echo "========================================"
-echo "Setup complete."
-echo "========================================"
-echo ""
+printf '========================================\n'
 if [ "$BACKED_UP" -gt 0 ]; then
-  echo "Replaced $BACKED_UP existing file(s). The originals are in:"
-  echo "  ${BACKUP_DIR#$TARGET_DIR/}/"
-  echo ""
+  printf 'Backed up %s file(s) to %s\n' "$BACKED_UP" "${BACKUP_DIR#$TARGET_DIR/}/"
 fi
-echo "Your Trongate project is ready with:"
-echo "  - Claude scaffold (AGENTS.md + CLAUDE.md, slash commands, reference docs)"
-echo "  - Trongate's native css/trongate.css plus public/css/app.css - no build step"
-echo "  - Under-construction homepage (shown by default)"
-echo "  - Component showcase at /welcome/components"
-echo "  - Verification gates: tests/run.php, php_guard hook, PHPStan config"
-echo "  - ../deploy.sh, configured by ../.deploy.env"
-echo ""
-echo "Next steps:"
-echo "  1. Run 'php tests/run.php' to confirm the app answers (needs your local server up)"
-echo "  2. Run 'bash tools/install-phpstan.sh' once to enable static analysis"
-echo "  3. Visit /welcome/components to see the component reference"
-echo "  4. Edit the under-construction page: update the contact email"
-echo "     and company name in modules/welcome/views/default_homepage.php"
-echo "  5. Fill in your server details in ../.deploy.env, then dry-run ../deploy.sh"
-echo ""
+printf '%s\n' 'Next:' '  1. Run php tests/run.php (requires your local server).' '  2. Run bash tools/install-phpstan.sh to install PHPStan.' '  3. Customize modules/welcome/views/default_homepage.php.' '  4. Edit .deploy.env and run ./deploy.sh (dry-run by default).' '  5. Use --reset-homepage only when you explicitly want to restore the demo.'
