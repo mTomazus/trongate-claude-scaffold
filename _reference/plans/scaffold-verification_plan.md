@@ -1,6 +1,6 @@
 # Plan: shared scaffold verification
 
-Date: 2026-10-18. Tier 1. Status: In Progress.
+Date: 2026-10-18. Tier 1. Status: Complete.
 Branch: `feature/scaffold-verification`, based on the completed installer branch.
 
 1. Add a scaffold-only `tools/check-scaffold.sh` command for active PHP/Bash
@@ -41,3 +41,17 @@ or GitHub workflow dispatch. Hosted CI execution requires a later approved push.
   case to check the tip commit's patch. Existing-branch pushes and PRs still
   check their full ranges. This avoids unrelated historical cleanup and is
   documented explicitly; new-branch multi-commit ranges are checked on the PR.
+- Corrected real-repository zero-SHA run, invoked by absolute path from `/tmp`:
+  exit 0; installer 26/26 and guard 19/19 passed, syntax/whitespace passed.
+- Three follow-up new-branch scenarios passed: initial commit whitespace rejected
+  (exit 2); clean tip with historical whitespace accepted (exit 0); tip whitespace
+  rejected (exit 2). These supplement the twelve earlier runner checks.
+- Final `bash tools/check-scaffold.sh 43353e4` with CI/README staged: exit 0;
+  installer 26/26, guard 19/19, active syntax and staged/unstaged/committed-range
+  whitespace checks passed. Final Ruby YAML/structure assertions also checked
+  full history checkout and disabled credential persistence: exit 0.
+- Explicit self-review: only runner, workflow, shared instructions, Claude commit/
+  verifier guidance, README and this plan changed. No independent review claimed
+  for this Tier 1 change. Hosted workflow and Linux execution remain unverified;
+  they require a later approved push. No engine changes, dependencies in the
+  application, deployment or push occurred.
