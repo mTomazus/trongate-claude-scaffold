@@ -12,7 +12,8 @@ test('homepage returns 200', function () {
 
 test('homepage renders the under-construction page', function () {
     $res = tg_get('/');
-    assert_body_contains('Coming Soon', $res);
+    assert_body_contains('Under', $res);
+    assert_body_contains('Construction', $res);
 });
 
 test('homepage loads the Trongate stylesheet', function () {
