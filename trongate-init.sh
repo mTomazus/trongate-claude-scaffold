@@ -253,6 +253,9 @@ prepare_claude_settings() {
         $data = is_file($file)
           ? json_decode(file_get_contents($file), false, 512, JSON_THROW_ON_ERROR)
           : new stdClass();
+        if (is_file($file) && serialize($data) !== serialize(json_decode(
+          file_get_contents($file), false, 512, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING
+        ))) throw new RuntimeException("Settings contain an integer outside PHP exact integer range; refusing a lossy merge");
         if (!is_object($data)) throw new RuntimeException("Settings root must be an object");
         foreach (["permissions", "hooks"] as $key) {
           if (property_exists($data, $key) && !is_object($data->$key)) {
@@ -285,7 +288,7 @@ prepare_claude_settings() {
           if (!in_array($entry, $target->hooks->$event)) $target->hooks->{$event}[] = $entry;
         }
       }
-      $encoded = json_encode($target, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+      $encoded = json_encode($target, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
       if (is_file($files[1])) {
         $original = file_get_contents($files[1]);
         if (json_decode($original) == $target) $encoded = $original;

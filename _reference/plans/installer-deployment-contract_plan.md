@@ -1,6 +1,6 @@
 # Plan: installer and deployment contract
 
-Date: 2026-10-18. Tier 2. Status: In Progress.
+Date: 2026-10-18. Tier 2. Status: Complete.
 Spec: `_reference/specs/installer-deployment-contract.md`.
 Branch: `feature/installer-deployment-contract` (from the current local base).
 
@@ -43,3 +43,36 @@ separately and cannot establish scaffold script correctness.
 - Policy: preserve contents and executable modes of retained custom scripts;
   `.deploy.env` alone is deliberately restricted to mode 600 on real installs.
   Installer state and additive gitignore/settings merges are documented writes.
+- Integrated checks after README update: `php tests/installer_test.php` →
+  25 tests, 25 passed, 0 failed, exit 0; `php tests/php_guard_test.php` →
+  19 tests, 19 passed, 0 failed, exit 0. `php -l tests/installer_test.php` →
+  no syntax errors, exit 0. JSON PostToolUse payload for that file piped into
+  `php .claude/hooks/php_guard.php` → no findings, exit 0. Individual `bash -n`
+  checks (installer, deploy script, env template) → exit 0.
+  `git diff --check 750a398^` → no findings, exit 0.
+- Application gates attempted using the bundled paths (root application paths
+  do not exist): `php project-files/tests/run.php` → exit 2, "No base URL found";
+  `bash project-files/tools/phpstan.sh` → exit 2, "PHPStan is not installed".
+  These are unavailable checks, not passes; no application/server, downloaded
+  PHPStan, real SSH/rsync deployment, or UI validation was exercised.
+- Independent review found: oversized integers could round during JSON merge;
+  decimals such as `1.0` lost their float type; inherited environment variables
+  could supply missing deployment settings, and empty legacy keys were accepted.
+  Fixed with early rejection of unrepresentable integers, preservation of zero
+  fractions, clearing inherited deploy settings and checking legacy key presence.
+  Added regression cases; spec and README document the numeric safety limit.
+- Final implementer run after review fixes and default-port regression addition:
+  `php tests/installer_test.php` → 26 tests, 26 passed, 0 failed, exit 0.
+  PHP lint, changed-file guard, individual Bash syntax checks and diff whitespace
+  check → exit 0, no findings. Name-only diff lists only the seven planned files;
+  `git diff --name-only 750a398^ -- engine` → empty, exit 0.
+- Independent verifier reran installer (26/26) and convention guard (19/19)
+  suites, Bash syntax, changed PHP lint/guard and diff whitespace checks: all
+  exit 0. Separate reproductions confirmed the review fixes; no remaining
+  findings. Its root application gate attempts were unavailable:
+  `php tests/run.php` → exit 1 (missing file), `bash tools/phpstan.sh` → exit 127
+  (missing script). Neither is a pass; bundled-path exit-2 outcomes above also
+  remain applicable.
+- Final scope: installer, two deployment templates, scaffold-only regression
+  tests, README, spec and plan. No engine/application template changes or new
+  dependencies. Real docs fetches and remote deployment remain untested.

@@ -11,6 +11,7 @@ Date: 2026-10-18. Scope: scaffold installation and bundled deployment helpers.
 - Never overwrite instructions, example tests, or deployment credentials.
   Merge required Claude deny rules/hooks without changing custom settings or
   JSON types. Validate settings before making any project changes.
+  Reject integers outside PHP's exact integer range before writes.
 - Installer `--dry-run` performs no writes (including temporary files), chmod,
   or network operations. Reject unsafe destinations before making changes.
 - Deployment defaults to rsync preview. Live sync requires `--live` and explicit

@@ -167,11 +167,12 @@ try {
 
     scenario('settings merge preserves custom values, JSON types and hooks', function () use ($repo): void {
         $p = fixture();
-        $custom = '{"model":"custom","env":{},"list":[],"nullable":null,"permissions":{"allow":["custom"],"ask":["ask"],"deny":["deny"]},"hooks":{"PostToolUse":[{"matcher":"custom","hooks":[]}],"Stop":[]}}';
+        $custom = '{"model":"custom","env":{},"list":[],"nullable":null,"custom_float":1.0,"permissions":{"allow":["custom"],"ask":["ask"],"deny":["deny"]},"hooks":{"PostToolUse":[{"matcher":"custom","hooks":[]}],"Stop":[]}}';
         put($p . '/.claude/settings.json', $custom);
         succeeds(install($p));
         $data = json_decode(file_get_contents($p . '/.claude/settings.json'));
         check($data->model === 'custom' && is_object($data->env) && $data->list === [] && $data->nullable === null, 'Lost custom value/type');
+        check($data->custom_float === 1.0, 'Changed float to integer');
         check($data->permissions->allow === ['custom'] && $data->permissions->ask === ['ask'], 'Lost custom permissions');
         check($data->hooks->PostToolUse[0]->matcher === 'custom' && $data->hooks->Stop === [], 'Lost custom hook');
         check(count($data->permissions->deny) === 3 && count($data->hooks->PostToolUse) === 2, 'Missing additions');
@@ -181,7 +182,7 @@ try {
         check(file_get_contents($p . '/.claude/settings.json') === $bytes, 'Repeated merge changed settings');
     });
 
-    foreach (['{', '[]', '{"permissions":null}', '{"permissions":"x"}', '{"permissions":{"deny":{}}}', '{"permissions":{"allow":[1]}}', '{"hooks":[]}', '{"hooks":{"PostToolUse":{}}}'] as $json) {
+    foreach (['{', '[]', '{"permissions":null}', '{"permissions":"x"}', '{"permissions":{"deny":{}}}', '{"permissions":{"allow":[1]}}', '{"hooks":[]}', '{"hooks":{"PostToolUse":{}}}', '{"custom_id":9223372036854775809}'] as $json) {
         scenario('invalid settings rejected before writes: ' . $json, function () use ($json): void {
             $p = fixture();
             put($p . '/.claude/settings.json', $json);
@@ -277,12 +278,16 @@ try {
         put($p . '/.deploy.env', "DEPLOY_USER=tester\nDEPLOY_HOST=example.invalid\nDEPLOY_PORT=22\nDEPLOY_REMOTE_PATH=/srv/app\n");
         $bin = dirname($p) . '/bin'; mkdir($bin);
         put($bin . '/rsync', "#!/bin/sh\nprintf '%s\\n' \"\$@\"\n"); chmod($bin . '/rsync', 0700);
-        $env = ['PATH' => $bin . ':' . getenv('PATH')];
+        $env = ['PATH' => $bin . ':' . getenv('PATH'), 'DEPLOY_USER' => 'inherited', 'DEPLOY_HOST' => 'inherited.invalid', 'DEPLOY_REMOTE_PATH' => '/inherited', 'DEPLOY_PORT' => '1234'];
         [$code, $out] = run_command(['bash', $p . '/deploy.sh'], dirname($p), $env);
         succeeds([$code, $out]);
         check(str_contains($out, "\n--dry-run\n") && str_contains($out, "\n" . $p . "/\n"), 'Wrong preview/source');
         foreach (['/.trongate-init-backup/', '/.trongate-init-state*', '.deploy.env', '.claude/', '.codex/', '.agents/', '/tests/', '/tools/', 'config/'] as $excluded) check(str_contains($out, "\n" . $excluded . "\n"), 'Missing exclusion ' . $excluded);
         check(str_contains($out, 'tester@example.invalid:/srv/app/'), 'Wrong remote');
+        put($p . '/.deploy.env', "DEPLOY_USER=tester\nDEPLOY_HOST=example.invalid\nDEPLOY_REMOTE_PATH=/srv/app\n");
+        [$code, $out] = run_command(['bash', $p . '/deploy.sh'], $p, $env);
+        succeeds([$code, $out]);
+        check(str_contains($out, "\nssh -p 22\n"), 'Default port came from inherited environment');
         foreach (["n\n", ''] as $input) {
             [$code, $out] = run_command(['bash', $p . '/deploy.sh', '--live'], dirname($p), $env, $input);
             succeeds([$code, $out]);
@@ -300,9 +305,9 @@ try {
         $p = fixture(); succeeds(install($p));
         $bin = dirname($p) . '/bin'; mkdir($bin);
         put($bin . '/rsync', "#!/bin/sh\nexit 88\n"); chmod($bin . '/rsync', 0700);
-        $env = ['PATH' => $bin . ':' . getenv('PATH')];
+        $env = ['PATH' => $bin . ':' . getenv('PATH'), 'DEPLOY_USER' => 'inherited', 'DEPLOY_HOST' => 'inherited.invalid', 'DEPLOY_REMOTE_PATH' => '/inherited', 'DEPLOY_PORT' => '1234'];
         $valid = "DEPLOY_USER=tester\nDEPLOY_HOST=example.invalid\nDEPLOY_PORT=22\nDEPLOY_REMOTE_PATH=/srv/app\n";
-        $configs = ['', file_get_contents($p . '/.deploy.env'), $valid . "DEPLOY_SOURCE=old\n", $valid . "DEPLOY_PATH=/old\n"];
+        $configs = ['', file_get_contents($p . '/.deploy.env'), $valid . "DEPLOY_SOURCE=old\n", $valid . "DEPLOY_PATH=/old\n", $valid . "DEPLOY_SOURCE=\n", $valid . "DEPLOY_PATH=\n"];
         foreach (['/', '/srv/../', '/./', '/srv/app;touch', '/srv/my app'] as $path) $configs[] = str_replace('/srv/app', '"' . $path . '"', $valid);
         foreach (['0', '65536', 'x', '22 -oProxyCommand=bad'] as $port) $configs[] = str_replace('PORT=22', 'PORT="' . $port . '"', $valid);
         foreach ($configs as $config) {

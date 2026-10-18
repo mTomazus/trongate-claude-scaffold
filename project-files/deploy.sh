@@ -34,6 +34,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 # shellcheck source=/dev/null
+# Destinations must come from this project's file, never the caller's shell.
+unset DEPLOY_USER DEPLOY_HOST DEPLOY_PORT DEPLOY_REMOTE_PATH DEPLOY_SOURCE DEPLOY_PATH
 source "$ENV_FILE"
 
 DEPLOY_USER="${DEPLOY_USER:-}"
@@ -42,7 +44,7 @@ DEPLOY_PORT="${DEPLOY_PORT:-22}"
 DEPLOY_REMOTE_PATH="${DEPLOY_REMOTE_PATH:-}"
 
 # ─── Guards: refuse to run on missing or placeholder settings ────────────────
-if [[ -n "${DEPLOY_SOURCE:-}" || -n "${DEPLOY_PATH:-}" ]]; then
+if [[ "${DEPLOY_SOURCE+x}" == x || "${DEPLOY_PATH+x}" == x ]]; then
   echo "✗  Legacy deployment settings detected. Move this helper into the project root, remove DEPLOY_SOURCE and rename DEPLOY_PATH to DEPLOY_REMOTE_PATH after reviewing the destination." >&2
   exit 1
 fi
